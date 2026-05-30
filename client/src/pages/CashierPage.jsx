@@ -80,9 +80,12 @@ export default function CashierPage() {
       {/* LEFT: menu */}
       <div className="menu-panel">
         <div className="search-bar">
+          <span className="search-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          </span>
           <input
             type="text"
-            placeholder="🔍 Поиск блюда..."
+            placeholder="Поиск блюда..."
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -102,7 +105,7 @@ export default function CashierPage() {
           {currentItems.map(item => (
             <button key={item.id} className="item-card" onClick={() => addToCart(item)}>
               <span className="item-name">{item.name}</span>
-              <span className="item-price">{item.price} ₽</span>
+              <span className="item-price">{item.price} TMT</span>
             </button>
           ))}
         </div>
@@ -124,7 +127,12 @@ export default function CashierPage() {
         </div>
 
         <div className="cart-items">
-          {cart.length === 0 && <p className="empty-cart">Выберите позиции из меню</p>}
+          {cart.length === 0 && (
+            <div className="empty-cart">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ddd" strokeWidth="1.5"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+              <p>Выберите позиции из меню</p>
+            </div>
+          )}
           {cart.map(item => (
             <div key={item.itemId} className="cart-item">
               <span className="cart-name">{item.name}</span>
@@ -133,7 +141,7 @@ export default function CashierPage() {
                 <span>{item.quantity}</span>
                 <button onClick={() => addToCart({ id: item.itemId, name: item.name, price: item.price })}>+</button>
               </div>
-              <span className="cart-sum">{(item.price * item.quantity).toFixed(0)} ₽</span>
+              <span className="cart-sum">{(item.price * item.quantity).toFixed(0)} TMT</span>
             </div>
           ))}
         </div>
@@ -150,16 +158,22 @@ export default function CashierPage() {
             <button
               className={paymentType === 'CASH' ? 'pay-btn active' : 'pay-btn'}
               onClick={() => setPaymentType('CASH')}
-            >💵 Наличные</button>
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>
+              Наличные
+            </button>
             <button
               className={paymentType === 'CARD' ? 'pay-btn active' : 'pay-btn'}
               onClick={() => setPaymentType('CARD')}
-            >💳 Карта</button>
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+              Карта
+            </button>
           </div>
 
           <div className="total-row">
             <span>Итого:</span>
-            <span className="total-amount">{total.toFixed(0)} ₽</span>
+            <span className="total-amount">{total.toFixed(0)} TMT</span>
           </div>
 
           <button
@@ -167,18 +181,34 @@ export default function CashierPage() {
             onClick={handleSubmit}
             disabled={cart.length === 0 || loading}
           >
-            {loading ? 'Оформляем...' : '✅ Принять и распечатать чек'}
+            {loading ? (
+              'Оформляем...'
+            ) : (
+              <>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                Принять и распечатать чек
+              </>
+            )}
           </button>
 
           {cart.length > 0 && (
-            <button className="clear-btn" onClick={clearCart}>🗑 Очистить</button>
+            <button className="clear-btn" onClick={clearCart}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+              Очистить
+            </button>
           )}
         </div>
 
         {lastOrder && (
           <div className="last-order">
-            ✓ Заказ #{lastOrder.number} оформлен — {lastOrder.total.toFixed(0)} ₽
-            <button onClick={() => printReceipt(lastOrder)}>🖨 Напечатать снова</button>
+            <span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Заказ #{lastOrder.number} — {lastOrder.total.toFixed(0)} TMT
+            </span>
+            <button onClick={() => printReceipt(lastOrder)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              Напечатать
+            </button>
           </div>
         )}
       </div>
