@@ -1,0 +1,8 @@
+[build]
+builder = "nixpacks"
+buildCommand = "npm run build"
+
+[deploy]
+startCommand = "cd server && npx prisma db push && node index.js"
+healthcheckPath = "/api/categories"
+restartPolicyType = "on_failure"
