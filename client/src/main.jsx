@@ -11,7 +11,7 @@ function Nav() {
   return (
     <nav className="nav">
       <span className="nav-logo">
-        <img src="/logo-icon.svg" alt="" width="22" height="22" style={{verticalAlign:'middle',marginRight:8}} />
+        <img src="waiter-app/public/hos_logo.png" alt="" width="22" height="22" style={{verticalAlign:'middle',marginRight:8}} />
         HOS LOUNGE
       </span>
       <div className="nav-links">
