@@ -1,9 +1,9 @@
 [build]
 builder = "nixpacks"
-buildCommand = "cd client && npm install && npm run build && cd ../waiter-app && npm install && npm run build && cd ../server && npm install && npx prisma generate"
+buildCommand = "cd server && npm install"
 
 [deploy]
-startCommand = "cd server && npx prisma db push --accept-data-loss && node index.js"
+startCommand = "cd server && node index-sqlite.js"
 healthcheckPath = "/health"
 healthcheckTimeout = 60
 restartPolicyType = "on_failure"
