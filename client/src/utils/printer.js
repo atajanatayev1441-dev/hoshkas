@@ -31,7 +31,7 @@ async function printViaSerial(order) {
   await cmd([ESC, 0x40])
   // Center
   await cmd([ESC, 0x61, 0x01])
-  await txt('ЛАУНЖ-КАФЕ\n')
+  await txt('HOS LOUNGE\n')
   await txt('--------------------------------\n')
   // Left
   await cmd([ESC, 0x61, 0x00])
@@ -50,7 +50,7 @@ async function printViaSerial(order) {
   await txt('--------------------------------\n')
   // Bold total
   await cmd([ESC, 0x45, 0x01])
-  await txt(`ИТОГО: ${order.total.toFixed(2)} руб.\n`)
+  await txt(`ИТОГО: ${order.total.toFixed(2)} TMT\n`)
   await cmd([ESC, 0x45, 0x00])
   await txt(`Оплата: ${order.paymentType === 'CASH' ? 'Наличные' : 'Карта'}\n`)
   await txt('--------------------------------\n')
@@ -80,7 +80,7 @@ function printViaWindow(order) {
       .total { font-weight: bold; font-size: 15px; }
       .center { text-align: center; }
     </style></head><body>
-    <h2>ЛАУНЖ-КАФЕ</h2>
+    <h2>HOS LOUNGE</h2>
     <hr>
     <p>Чек #${order.number}<br>
     ${new Date(order.createdAt).toLocaleString('ru-RU')}<br>
@@ -88,7 +88,7 @@ function printViaWindow(order) {
     <hr>
     <table>${lines}</table>
     <hr>
-    <p class="total">ИТОГО: ${order.total.toFixed(2)} руб.</p>
+    <p class="total">ИТОГО: ${order.total.toFixed(2)} TMT</p>
     <p>Оплата: ${order.paymentType === 'CASH' ? 'Наличные' : 'Карта'}</p>
     <hr>
     <p class="center">Спасибо! Приятного отдыха!</p>
