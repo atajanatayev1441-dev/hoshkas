@@ -494,3 +494,42 @@ body {
   gap: 12px; padding: 40px; color: #aaa;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Cashier tabs ─────────────────────────── */
+.cashier-wrap { display: flex; flex-direction: column; height: calc(100vh - 56px); }
+.cashier-tabs { display: flex; background: #fff; border-bottom: 2px solid #f0f0f0; padding: 0 20px; gap: 4px; }
+.cashier-tabs button { border: none; background: none; padding: 14px 20px; font-size: 14px; font-weight: 500; color: #888; cursor: pointer; display: flex; align-items: center; gap: 7px; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all .15s; position: relative; }
+.cashier-tabs button.active { color: #1a1a2e; border-bottom-color: #1a1a2e; }
+.badge-count { background: #e74c3c; color: #fff; border-radius: 10px; font-size: 11px; font-weight: 700; padding: 1px 6px; }
+
+/* ── Pending queue ────────────────────────── */
+.queue-panel { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px; background: #f7f7fb; }
+.queue-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; height: 300px; color: #bbb; font-size: 15px; }
+.pending-card { background: #fff; border-radius: 14px; padding: 18px; box-shadow: 0 2px 8px rgba(0,0,0,.07); border-left: 4px solid #f39c12; animation: slideIn .3s ease; }
+@keyframes slideIn { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.pending-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.pending-info { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.pending-waiter { display: flex; align-items: center; gap: 5px; font-weight: 600; font-size: 15px; color: #1a1a2e; }
+.pending-table { display: flex; align-items: center; gap: 5px; color: #555; font-size: 14px; }
+.pending-time { color: #aaa; font-size: 13px; }
+.pending-total { font-size: 18px; font-weight: 700; color: #1a1a2e; }
+.pending-items { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.pending-item { background: #f0f0f8; color: #333; padding: 4px 10px; border-radius: 20px; font-size: 13px; }
+.pending-comment { font-size: 13px; color: #888; margin-bottom: 12px; font-style: italic; }
+.pending-actions { display: flex; align-items: center; gap: 10px; }
+.accept-btn { background: #27ae60; color: #fff; border: none; border-radius: 10px; padding: 10px 20px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.accept-btn:disabled { opacity: .5; }
+.decline-btn { background: #fef0f0; color: #e74c3c; border: 1px solid #fbd5d5; border-radius: 10px; padding: 10px 12px; cursor: pointer; display: flex; align-items: center; }
+.decline-btn:hover { background: #fde8e8; }
+
+/* ── Waiters page ─────────────────────────── */
+.waiter-link-card { background: #eef2ff; border: 1.5px solid #c7d2fe; border-radius: 14px; padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 24px; flex-wrap: wrap; }
+.waiter-link-card h3 { font-size: 15px; color: #1a1a2e; margin-bottom: 4px; }
+.waiter-link-card p { font-size: 13px; color: #666; margin-bottom: 8px; }
+.waiter-url { color: #4f46e5; font-size: 14px; font-weight: 600; text-decoration: none; word-break: break-all; }
+.waiter-url:hover { text-decoration: underline; }
+.copy-btn { display: flex; align-items: center; gap: 6px; background: #4f46e5; color: #fff; border: none; border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.copy-btn:hover { background: #4338ca; }
+.waiter-add-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.waiter-add-row input { flex: 1; min-width: 140px; }
+.waiter-add-row button { white-space: nowrap; }
