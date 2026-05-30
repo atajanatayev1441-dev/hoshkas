@@ -32,10 +32,8 @@ export default function LoginPage({ onLogin }) {
   function delDigit() { setPin(p => p.slice(0, -1)) }
 
   return (
-    <div className="login-page">
-      <div className="login-card">
-        <div className="login-logo">HOS LOUNGE</div>
-        <p className="login-sub">Введите PIN для входа</p>
+    <img src="/waiter/hos_logo.png" alt="HOS Coffee" style={{ width: 120, height: 120, objectFit: 'contain', marginBottom: 8 }} />
+<p className="login-sub">Введите PIN для входа</p>
 
         <div className="pin-dots">
           {[0,1,2,3,4,5].map(i => (
