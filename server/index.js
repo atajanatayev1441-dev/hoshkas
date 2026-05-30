@@ -287,6 +287,57 @@ app.get('/api/export/orders', async (req, res) => {
 // ─── Health check ─────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ ok: true }))
 
+
+// ─── EXCEL EXPORT ─────────────────────────────────────────────
+app.get('/api/export/orders/excel', async (req, res) => {
+  try {
+    const { createRequire } = await import('module')
+    const require = createRequire(import.meta.url)
+    const XLSX = require('xlsx')
+
+    const { from, to } = req.query
+    const where = {}
+    if (from || to) {
+      where.createdAt = {}
+      if (from) where.createdAt.gte = new Date(from)
+      if (to) where.createdAt.lte = new Date(to + 'T23:59:59')
+    }
+    const orders = await prisma.order.findMany({
+      where,
+      include: { items: true },
+      orderBy: { createdAt: 'asc' }
+    })
+
+    const rows = orders.map(o => ({
+      '№ заказа': o.number,
+      'Дата': new Date(o.createdAt).toLocaleString('ru-RU'),
+      'Стол': o.tableNumber || '—',
+      'Статус': o.status,
+      'Оплата': o.paymentType === 'CASH' ? 'Наличные' : 'Карта',
+      'Позиции': o.items.map(i => `${i.name} x${i.quantity}`).join('; '),
+      'Сумма (TMT)': o.total
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [
+      { wch: 10 }, { wch: 20 }, { wch: 12 }, { wch: 12 },
+      { wch: 12 }, { wch: 50 }, { wch: 14 }
+    ]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Заказы')
+
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+    const filename = `orders_${from || 'all'}_${to || 'all'}.xlsx`
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.send(buf)
+  } catch (e) {
+    console.error('Excel export error:', e)
+    res.status(500).json({ error: e.message })
+  }
+})
+
 // SPA fallback
 app.get('*', (req, res) => {
   res.sendFile(join(publicPath, 'index.html'))
