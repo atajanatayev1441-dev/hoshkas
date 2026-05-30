@@ -1,9 +1,9 @@
 [build]
 builder = "nixpacks"
-buildCommand = "cd server && npm install"
+buildCommand = "cd server && npm install && npx prisma generate && npx prisma db push"
 
 [deploy]
-startCommand = "cd server && node index-sqlite.js"
+startCommand = "cd server && node index.js"
 healthcheckPath = "/health"
 healthcheckTimeout = 60
 restartPolicyType = "on_failure"
