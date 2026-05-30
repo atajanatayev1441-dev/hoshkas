@@ -68,7 +68,9 @@ export default function MenuPage() {
             {categories.map(c => (
               <li key={c.id}>
                 <span>{c.name}</span>
-                <button className="del-btn" onClick={() => deleteCategory(c.id)}>✕</button>
+                <button className="del-btn" onClick={() => deleteCategory(c.id)}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
               </li>
             ))}
           </ul>
@@ -79,7 +81,10 @@ export default function MenuPage() {
           <h2>Добавить позицию</h2>
           <div className="form-col">
             <input value={newItem.name} onChange={e => setNewItem(p => ({ ...p, name: e.target.value }))} placeholder="Название" />
-            <input type="number" value={newItem.price} onChange={e => setNewItem(p => ({ ...p, price: e.target.value }))} placeholder="Цена (₽)" />
+            <div className="price-input-wrap">
+              <input type="number" value={newItem.price} onChange={e => setNewItem(p => ({ ...p, price: e.target.value }))} placeholder="Цена" />
+              <span className="currency-label">TMT</span>
+            </div>
             <select value={newItem.categoryId} onChange={e => setNewItem(p => ({ ...p, categoryId: Number(e.target.value) }))}>
               {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
@@ -94,7 +99,7 @@ export default function MenuPage() {
         <thead><tr><th>Название</th><th>Категория</th><th>Цена</th><th>Статус</th><th>Действия</th></tr></thead>
         <tbody>
           {items.map(item => (
-            <tr key={item.id} style={{ opacity: item.active ? 1 : 0.4 }}>
+            <tr key={item.id} style={{ opacity: item.active ? 1 : 0.45 }}>
               {editItem?.id === item.id ? (
                 <>
                   <td><input value={editItem.name} onChange={e => setEditItem(p => ({ ...p, name: e.target.value }))} /></td>
@@ -103,22 +108,41 @@ export default function MenuPage() {
                       {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </td>
-                  <td><input type="number" value={editItem.price} onChange={e => setEditItem(p => ({ ...p, price: e.target.value }))} style={{ width: 80 }} /></td>
+                  <td>
+                    <div className="price-input-wrap">
+                      <input type="number" value={editItem.price} onChange={e => setEditItem(p => ({ ...p, price: e.target.value }))} style={{ width: 80 }} />
+                      <span className="currency-label">TMT</span>
+                    </div>
+                  </td>
                   <td>—</td>
                   <td>
-                    <button onClick={saveEdit}>💾</button>
-                    <button onClick={() => setEditItem(null)}>✕</button>
+                    <button className="icon-btn save" onClick={saveEdit}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    </button>
+                    <button className="icon-btn" onClick={() => setEditItem(null)}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
                   </td>
                 </>
               ) : (
                 <>
                   <td>{item.name}</td>
                   <td>{item.category?.name}</td>
-                  <td>{item.price} ₽</td>
-                  <td>{item.active ? '✅ Активно' : '🔴 Скрыто'}</td>
+                  <td>{item.price} TMT</td>
                   <td>
-                    <button onClick={() => setEditItem({ ...item })}>✏️</button>
-                    <button onClick={() => toggleItem(item)}>{item.active ? '🙈' : '👁'}</button>
+                    {item.active
+                      ? <span className="badge-active">Активно</span>
+                      : <span className="badge-hidden">Скрыто</span>}
+                  </td>
+                  <td>
+                    <button className="icon-btn" onClick={() => setEditItem({ ...item })} title="Редактировать">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                    <button className="icon-btn" onClick={() => toggleItem(item)} title={item.active ? 'Скрыть' : 'Показать'}>
+                      {item.active
+                        ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                        : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>}
+                    </button>
                   </td>
                 </>
               )}
