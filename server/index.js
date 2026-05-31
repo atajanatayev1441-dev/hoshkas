@@ -312,14 +312,6 @@ app.get('/api/export/orders/excel', async (req, res) => {
 
 app.get('/health', (req, res) => res.json({ ok: true }))
 
-const waiterPath = join(__dirname, '..', 'public-waiter')
-app.use('/waiter', express.static(waiterPath))
-app.get('/waiter/*', (req, res) => res.sendFile(join(waiterPath, 'index.html')))
-app.get('*', (req, res) => res.sendFile(join(publicPath, 'index.html')))
-
-const PORT = process.env.PORT || 3001
-connectWithRetry().then(() => httpServer.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`))).catch(err => { console.error('❌ DB failed:', err.message); process.exit(1) })
-
 // ─── ACCOUNTING AUTH ──────────────────────────────────────────
 app.post('/api/accounting/login', async (req, res) => {
   try {
@@ -461,3 +453,11 @@ app.get('/api/accounting/full-summary', async (req, res) => {
     })
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
+
+const waiterPath = join(__dirname, '..', 'public-waiter')
+app.use('/waiter', express.static(waiterPath))
+app.get('/waiter/*', (req, res) => res.sendFile(join(waiterPath, 'index.html')))
+app.get('*', (req, res) => res.sendFile(join(publicPath, 'index.html')))
+
+const PORT = process.env.PORT || 3001
+connectWithRetry().then(() => httpServer.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`))).catch(err => { console.error('❌ DB failed:', err.message); process.exit(1) })
