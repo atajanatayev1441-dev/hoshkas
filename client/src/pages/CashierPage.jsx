@@ -39,11 +39,20 @@ export default function CashierPage() {
     ws.onmessage = (e) => {
       const { event, data } = JSON.parse(e.data)
       if (event === 'new_order') {
-        setPendingOrders(prev => [data, ...prev])
-        playNotification()
+        // Показываем только закрытые чеки (PENDING)
+        if (data.status === 'PENDING') {
+          setPendingOrders(prev => {
+            if (prev.find(o => o.id === data.id)) return prev
+            return [data, ...prev]
+          })
+          playNotification()
+        }
       }
       if (event === 'order_cancelled') {
         setPendingOrders(prev => prev.filter(o => o.id !== data.id))
+      }
+      if (event === 'order_updated') {
+        // Игнорируем — открытые чеки не показываем на кассе
       }
     }
     ws.onclose = () => setTimeout(connectWS, 3000)
