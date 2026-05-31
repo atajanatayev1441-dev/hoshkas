@@ -37,7 +37,7 @@ model Waiter {
 model Order {
   id          Int         @id @default(autoincrement())
   number      Int         @unique
-  status      OrderStatus @default(PENDING)
+  status      OrderStatus @default(OPEN)
   tableNumber String?
   comment     String?
   items       OrderItem[]
@@ -61,7 +61,49 @@ model OrderItem {
   name     String
 }
 
+// ─── БУХГАЛТЕРИЯ ─────────────────────────────────────────────
+
+model Expense {
+  id          Int             @id @default(autoincrement())
+  amount      Float
+  category    ExpenseCategory
+  description String?
+  date        DateTime        @default(now())
+  createdAt   DateTime        @default(now())
+}
+
+model Debt {
+  id          Int        @id @default(autoincrement())
+  clientName  String
+  phone       String?
+  amount      Float
+  description String?
+  status      DebtStatus @default(UNPAID)
+  createdAt   DateTime   @default(now())
+  paidAt      DateTime?
+}
+
+model Revision {
+  id        Int      @id @default(autoincrement())
+  date      DateTime @default(now())
+  cashIn    Float    @default(0)
+  cashOut   Float    @default(0)
+  cardTotal Float    @default(0)
+  expenses  Float    @default(0)
+  notes     String?
+  createdBy String?
+  createdAt DateTime @default(now())
+}
+
+model AccountingUser {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  createdAt DateTime @default(now())
+}
+
 enum OrderStatus {
+  OPEN
   PENDING
   ACCEPTED
   PAID
@@ -71,4 +113,19 @@ enum OrderStatus {
 enum PaymentType {
   CASH
   CARD
+}
+
+enum ExpenseCategory {
+  PURCHASE
+  SALARY
+  RENT
+  UTILITIES
+  MARKETING
+  REPAIR
+  OTHER
+}
+
+enum DebtStatus {
+  UNPAID
+  PAID
 }
