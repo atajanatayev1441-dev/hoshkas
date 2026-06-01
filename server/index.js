@@ -461,3 +461,159 @@ app.get('*', (req, res) => res.sendFile(join(publicPath, 'index.html')))
 
 const PORT = process.env.PORT || 3001
 connectWithRetry().then(() => httpServer.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`))).catch(err => { console.error('❌ DB failed:', err.message); process.exit(1) })
+
+// ─── MANAGER ──────────────────────────────────────────────────
+
+// Авторизация управляющего
+app.post('/api/manager/login', async (req, res) => {
+  try {
+    const { password } = req.body
+    const managerPass = process.env.MANAGER_PASSWORD || 'manager2024'
+    if (password !== managerPass) return res.status(401).json({ error: 'Неверный пароль' })
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// Дашборд управляющего — всё в одном запросе
+app.get('/api/manager/dashboard', async (req, res) => {
+  try {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const [todayOrders, openOrders, waiters, allTodayOrders] = await Promise.all([
+      prisma.order.findMany({
+        where: { status: 'PAID', createdAt: { gte: today } },
+        include: { items: true, waiter: true },
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.order.findMany({
+        where: { status: { in: ['OPEN', 'PENDING'] } },
+        include: { items: true, waiter: true },
+        orderBy: { createdAt: 'asc' }
+      }),
+      prisma.waiter.findMany({ where: { active: true } }),
+      prisma.order.findMany({
+        where: { createdAt: { gte: today } },
+        include: { items: true, waiter: true }
+      })
+    ])
+
+    // Выручка сегодня
+    const revenue = todayOrders.reduce((s, o) => s + o.total, 0)
+    const orderCount = todayOrders.length
+    const avgCheck = orderCount > 0 ? revenue / orderCount : 0
+    const byCash = todayOrders.filter(o => o.paymentType === 'CASH').reduce((s, o) => s + o.total, 0)
+    const byCard = todayOrders.filter(o => o.paymentType === 'CARD').reduce((s, o) => s + o.total, 0)
+
+    // Рейтинг официантов за сегодня
+    const waiterStats = {}
+    for (const o of todayOrders) {
+      if (!o.waiterId) continue
+      const id = o.waiterId
+      if (!waiterStats[id]) waiterStats[id] = { id, name: o.waiterName || 'Неизвестно', revenue: 0, orders: 0, items: {} }
+      waiterStats[id].revenue += o.total
+      waiterStats[id].orders += 1
+      for (const item of o.items) {
+        waiterStats[id].items[item.name] = (waiterStats[id].items[item.name] || 0) + item.quantity
+      }
+    }
+    const waiterRating = Object.values(waiterStats).map(w => ({
+      ...w,
+      avgCheck: w.orders > 0 ? w.revenue / w.orders : 0,
+      topItem: Object.entries(w.items).sort((a, b) => b[1] - a[1])[0]?.[0] || '—'
+    })).sort((a, b) => b.revenue - a.revenue)
+
+    // Аналитика по часам (сегодня)
+    const byHour = {}
+    for (let h = 0; h < 24; h++) byHour[h] = { hour: h, orders: 0, revenue: 0 }
+    for (const o of allTodayOrders.filter(o => o.status === 'PAID')) {
+      const h = new Date(o.createdAt).getHours()
+      byHour[h].orders += 1
+      byHour[h].revenue += o.total
+    }
+
+    // Активные столы
+    const activeTables = openOrders.map(o => ({
+      ...o,
+      minutesOpen: Math.floor((Date.now() - new Date(o.createdAt).getTime()) / 60000)
+    }))
+
+    // Предупреждения
+    const alerts = []
+    for (const t of activeTables) {
+      if (t.minutesOpen > 120) alerts.push({ type: 'long_table', message: `Стол ${t.tableNumber} открыт уже ${Math.floor(t.minutesOpen / 60)}ч ${t.minutesOpen % 60}м`, orderId: t.id })
+    }
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayRevenue = (await prisma.order.findMany({ where: { status: 'PAID', createdAt: { gte: yesterday, lt: today } } })).reduce((s, o) => s + o.total, 0)
+    if (yesterdayRevenue > 0 && revenue < yesterdayRevenue * 0.7) {
+      alerts.push({ type: 'low_revenue', message: `Выручка на ${Math.round((1 - revenue / yesterdayRevenue) * 100)}% ниже вчерашней` })
+    }
+
+    // Топ позиций сегодня
+    const itemMap = {}
+    for (const o of todayOrders) for (const i of o.items) {
+      if (!itemMap[i.name]) itemMap[i.name] = { name: i.name, qty: 0, revenue: 0 }
+      itemMap[i.name].qty += i.quantity
+      itemMap[i.name].revenue += i.price * i.quantity
+    }
+    const topItems = Object.values(itemMap).sort((a, b) => b.revenue - a.revenue).slice(0, 5)
+
+    res.json({
+      revenue, orderCount, avgCheck, byCash, byCard,
+      openCount: openOrders.filter(o => o.status === 'OPEN').length,
+      pendingCount: openOrders.filter(o => o.status === 'PENDING').length,
+      waiterRating,
+      byHour: Object.values(byHour).filter(h => h.hour >= 8 && h.hour <= 23),
+      activeTables,
+      recentOrders: todayOrders.slice(0, 20),
+      alerts,
+      topItems,
+      totalWaiters: waiters.length
+    })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// История чеков для управляющего с фильтрами
+app.get('/api/manager/orders', async (req, res) => {
+  try {
+    const { from, to, waiterId, limit = 100 } = req.query
+    const where = { status: 'PAID' }
+    if (from || to) {
+      where.createdAt = {}
+      if (from) where.createdAt.gte = new Date(from)
+      if (to) where.createdAt.lte = new Date(to + 'T23:59:59')
+    }
+    if (waiterId) where.waiterId = Number(waiterId)
+    res.json(await prisma.order.findMany({ where, include: { items: true, waiter: true }, orderBy: { createdAt: 'desc' }, take: Number(limit) }))
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// Рейтинг официантов за период
+app.get('/api/manager/waiter-stats', async (req, res) => {
+  try {
+    const { from, to } = req.query
+    const where = { status: 'PAID' }
+    if (from || to) {
+      where.createdAt = {}
+      if (from) where.createdAt.gte = new Date(from)
+      if (to) where.createdAt.lte = new Date(to + 'T23:59:59')
+    }
+    const orders = await prisma.order.findMany({ where, include: { items: true } })
+    const stats = {}
+    for (const o of orders) {
+      if (!o.waiterId) continue
+      const id = o.waiterId
+      if (!stats[id]) stats[id] = { id, name: o.waiterName || '—', revenue: 0, orders: 0, items: {} }
+      stats[id].revenue += o.total
+      stats[id].orders += 1
+      for (const item of o.items) stats[id].items[item.name] = (stats[id].items[item.name] || 0) + item.quantity
+    }
+    res.json(Object.values(stats).map(w => ({
+      ...w,
+      avgCheck: w.orders > 0 ? w.revenue / w.orders : 0,
+      topItem: Object.entries(w.items).sort((a, b) => b[1] - a[1])[0]?.[0] || '—',
+      items: undefined
+    })).sort((a, b) => b.revenue - a.revenue))
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
