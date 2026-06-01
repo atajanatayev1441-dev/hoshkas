@@ -88,11 +88,11 @@ export default function AccountingApp() {
       {/* Nav */}
       <div style={{ background:'#fff', borderBottom:'1px solid #e8e8e8', padding:'0 24px', display:'flex', gap:4, overflowX:'auto' }}>
         {[
-          { key:'dashboard', label:'📊 Дашборд' },
-          { key:'expenses',  label:'💸 Расходы' },
-          { key:'debts',     label:'📋 Долги' },
-          { key:'revisions', label:'🔍 Ревизии' },
-          { key:'reports',   label:'📈 Отчёты' },
+          { key:'dashboard', label:'Дашборд' },
+          { key:'expenses',  label:'Расходы' },
+          { key:'debts',     label:'Долги' },
+          { key:'revisions', label:'Ревизии' },
+          { key:'reports',   label:'Отчёты' },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             style={{ border:'none', background:'none', padding:'16px 16px 14px', fontSize:14, fontWeight:tab===t.key?700:400, color:tab===t.key?'#1a1a2e':'#888', borderBottom: tab===t.key?'2px solid #1a1a2e':'2px solid transparent', cursor:'pointer', whiteSpace:'nowrap' }}>
@@ -136,14 +136,14 @@ function Dashboard() {
   if (loading) return <Loader />
 
   const cards = [
-    { label:'Выручка сегодня', value:`${fmt(summary.revenue)} TMT`, color:'#27ae60', icon:'💰' },
-    { label:'Расходы сегодня', value:`${fmt(summary.totalExpenses)} TMT`, color:'#e74c3c', icon:'💸' },
-    { label:'Прибыль сегодня', value:`${fmt(summary.profit)} TMT`, color: summary.profit>=0?'#2980b9':'#e74c3c', icon:'📈' },
-    { label:'Заказов', value:summary.totalOrders, color:'#8e44ad', icon:'🧾' },
-    { label:'Наличные', value:`${fmt(summary.byCash)} TMT`, color:'#f39c12', icon:'💵' },
-    { label:'Карта', value:`${fmt(summary.byCard)} TMT`, color:'#16a085', icon:'💳' },
-    { label:'Долгов', value:`${fmt(summary.totalDebts)} TMT`, color:'#e67e22', icon:'⚠️' },
-    { label:'Средний чек', value:`${fmt(summary.avgCheck)} TMT`, color:'#7f8c8d', icon:'📊' },
+    { label:'Выручка сегодня', value:`${fmt(summary.revenue)} TMT`, color:'#27ae60', icon:'' },
+    { label:'Расходы сегодня', value:`${fmt(summary.totalExpenses)} TMT`, color:'#e74c3c', icon:'' },
+    { label:'Прибыль сегодня', value:`${fmt(summary.profit)} TMT`, color: summary.profit>=0?'#2980b9':'#e74c3c', icon:'' },
+    { label:'Заказов', value:summary.totalOrders, color:'#8e44ad', icon:'' },
+    { label:'Наличные', value:`${fmt(summary.byCash)} TMT`, color:'#f39c12', icon:'' },
+    { label:'Карта', value:`${fmt(summary.byCard)} TMT`, color:'#16a085', icon:'' },
+    { label:'Долгов', value:`${fmt(summary.totalDebts)} TMT`, color:'#e67e22', icon:'' },
+    { label:'Средний чек', value:`${fmt(summary.avgCheck)} TMT`, color:'#7f8c8d', icon:'' },
   ]
 
   return (
@@ -177,7 +177,7 @@ function Dashboard() {
       {/* Активные долги */}
       {debts.length > 0 && (
         <div style={{ background:'#fff', borderRadius:16, padding:20, boxShadow:'0 2px 8px rgba(0,0,0,0.06)' }}>
-          <div style={{ fontWeight:700, marginBottom:14, color:'#e74c3c' }}>⚠️ Непогашенные долги ({debts.length})</div>
+          <div style={{ fontWeight:700, marginBottom:14, color:'#e74c3c' }}> Непогашенные долги ({debts.length})</div>
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
             {debts.slice(0,5).map(d => (
               <div key={d.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', background:'#fdf0ef', borderRadius:10 }}>
@@ -233,7 +233,7 @@ function Expenses() {
   return (
     <div style={{ padding:24, maxWidth:900, margin:'0 auto' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
-        <div style={{ fontSize:20, fontWeight:700, color:'#1a1a2e' }}>💸 Расходы</div>
+        <div style={{ fontSize:20, fontWeight:700, color:'#1a1a2e' }}> Расходы</div>
         <button onClick={()=>setShowForm(!showForm)}
           style={{ background:'#1a1a2e', color:'#fff', border:'none', borderRadius:10, padding:'10px 18px', fontSize:14, fontWeight:600, cursor:'pointer' }}>
           + Добавить
@@ -451,7 +451,7 @@ function Revisions() {
           <div style={{ fontWeight:600, marginBottom:4, color:'#1a1a2e' }}>Ревизия за {form.date}</div>
           {autoData && (
             <div style={{ background:'#eaf4fb', borderRadius:10, padding:'10px 14px', marginBottom:14, fontSize:13, color:'#2980b9' }}>
-              📊 Данные из системы: выручка {fmt(autoData.revenue)} TMT · наличные {fmt(autoData.byCash)} TMT · карта {fmt(autoData.byCard)} TMT
+               Данные из системы: выручка {fmt(autoData.revenue)} TMT · наличные {fmt(autoData.byCash)} TMT · карта {fmt(autoData.byCard)} TMT
             </div>
           )}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
@@ -524,7 +524,7 @@ function Revisions() {
                     </div>
                   ))}
                 </div>
-                {r.notes && <div style={{ marginTop:10, fontSize:13, color:'#666', background:'#f8f9fa', borderRadius:8, padding:'8px 12px' }}>💬 {r.notes}</div>}
+                {r.notes && <div style={{ marginTop:10, fontSize:13, color:'#666', background:'#f8f9fa', borderRadius:8, padding:'8px 12px' }}>{r.notes}</div>}
               </div>
             )
           })}
@@ -564,7 +564,7 @@ function Reports() {
 
   return (
     <div style={{ padding:24, maxWidth:1000, margin:'0 auto' }}>
-      <div style={{ fontSize:20, fontWeight:700, color:'#1a1a2e', marginBottom:20 }}>📈 Отчёты</div>
+      <div style={{ fontSize:20, fontWeight:700, color:'#1a1a2e', marginBottom:20 }}> Отчёты</div>
 
       <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
         {[['today','Сегодня'],['week','7 дней'],['month','Месяц']].map(([k,l])=>(
