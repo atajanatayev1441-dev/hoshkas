@@ -460,7 +460,6 @@ app.get('/waiter/*', (req, res) => res.sendFile(join(waiterPath, 'index.html')))
 app.get('*', (req, res) => res.sendFile(join(publicPath, 'index.html')))
 
 const PORT = process.env.PORT || 3001
-connectWithRetry().then(() => httpServer.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`))).catch(err => { console.error('❌ DB failed:', err.message); process.exit(1) })
 
 // ─── MANAGER ──────────────────────────────────────────────────
 
@@ -617,3 +616,14 @@ app.get('/api/manager/waiter-stats', async (req, res) => {
     })).sort((a, b) => b.revenue - a.revenue))
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
+
+// ─── STATIC & CATCH-ALL (must be last) ───────────────────────
+const waiterPath = join(__dirname, '..', 'public-waiter')
+app.use('/waiter', express.static(waiterPath))
+app.get('/waiter/*', (req, res) => res.sendFile(join(waiterPath, 'index.html')))
+app.get('*', (req, res) => res.sendFile(join(publicPath, 'index.html')))
+
+const PORT = process.env.PORT || 3001
+connectWithRetry()
+  .then(() => httpServer.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`)))
+  .catch(err => { console.error('❌ DB failed:', err.message); process.exit(1) })
