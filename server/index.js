@@ -1275,6 +1275,141 @@ app.post('/api/shifts/:id/close', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
+
+// ─── КАЛЬКУЛЯЦИЯ БЛЮД ─────────────────────────────────────────
+
+// Получить все калькуляции
+app.get('/api/recipes', async (req, res) => {
+  try {
+    res.json(await prisma.recipe.findMany({
+      include: {
+        item: { include: { category: true } },
+        ingredients: { include: { product: { include: { warehouse: true } } } }
+      },
+      orderBy: { item: { name: 'asc' } }
+    }))
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// Получить одну калькуляцию по itemId
+app.get('/api/recipes/item/:itemId', async (req, res) => {
+  try {
+    const recipe = await prisma.recipe.findUnique({
+      where: { itemId: Number(req.params.itemId) },
+      include: {
+        item: { include: { category: true } },
+        ingredients: { include: { product: true } }
+      }
+    })
+    res.json(recipe || null)
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// Создать или обновить калькуляцию
+app.post('/api/recipes', async (req, res) => {
+  try {
+    const { itemId, yield: yld, yieldUnit, notes, ingredients } = req.body
+
+    // Calculate costs
+    let totalCost = 0
+    const processedIngredients = ingredients.map(ing => {
+      const gross = ing.quantity * (1 + (ing.wastePct||0)/100)
+      const cost = gross * (ing.costPrice || ing.product?.costPrice || 0)
+      totalCost += cost
+      return {
+        productId: Number(ing.productId),
+        quantity: parseFloat(ing.quantity),
+        unit: ing.unit || 'г',
+        wastePct: parseFloat(ing.wastePct||0),
+        grossQty: parseFloat(gross.toFixed(3)),
+        costPrice: parseFloat(ing.costPrice || ing.product?.costPrice || 0),
+        totalCost: parseFloat(cost.toFixed(2))
+      }
+    })
+
+    // Upsert recipe
+    const existing = await prisma.recipe.findUnique({ where: { itemId: Number(itemId) } })
+
+    let recipe
+    if (existing) {
+      await prisma.recipeItem.deleteMany({ where: { recipeId: existing.id } })
+      recipe = await prisma.recipe.update({
+        where: { itemId: Number(itemId) },
+        data: {
+          yield: parseFloat(yld||1),
+          yieldUnit: yieldUnit||'порция',
+          notes,
+          totalCost: parseFloat(totalCost.toFixed(2)),
+          ingredients: { create: processedIngredients }
+        },
+        include: { item: true, ingredients: { include: { product: true } } }
+      })
+    } else {
+      recipe = await prisma.recipe.create({
+        data: {
+          itemId: Number(itemId),
+          yield: parseFloat(yld||1),
+          yieldUnit: yieldUnit||'порция',
+          notes,
+          totalCost: parseFloat(totalCost.toFixed(2)),
+          ingredients: { create: processedIngredients }
+        },
+        include: { item: true, ingredients: { include: { product: true } } }
+      })
+    }
+
+    // Update item cost
+    await prisma.itemCost.upsert({
+      where: { itemId: Number(itemId) },
+      update: { costPrice: parseFloat(totalCost.toFixed(2)) },
+      create: { itemId: Number(itemId), costPrice: parseFloat(totalCost.toFixed(2)) }
+    })
+
+    res.json(recipe)
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/api/recipes/:id', async (req, res) => {
+  try {
+    await prisma.recipe.delete({ where: { id: Number(req.params.id) } })
+    res.json({ ok: true })
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// Отчёт — теоретический расход продуктов за период
+app.get('/api/recipes/consumption', async (req, res) => {
+  try {
+    const { from, to } = req.query
+    const where = { status: 'PAID' }
+    if (from) where.createdAt = { ...where.createdAt, gte: new Date(from) }
+    if (to) where.createdAt = { ...where.createdAt, lte: new Date(to + 'T23:59:59') }
+
+    const orders = await prisma.order.findMany({ where, include: { items: true } })
+    const recipes = await prisma.recipe.findMany({
+      include: { ingredients: { include: { product: true } } }
+    })
+
+    const recipeMap = {}
+    for (const r of recipes) recipeMap[r.itemId] = r
+
+    const consumption = {}
+    for (const order of orders) {
+      for (const oi of order.items) {
+        const recipe = recipeMap[oi.itemId]
+        if (!recipe) continue
+        for (const ing of recipe.ingredients) {
+          const key = ing.productId
+          if (!consumption[key]) consumption[key] = { productId: key, name: ing.product.name, unit: ing.product.unit, quantity: 0, cost: 0 }
+          consumption[key].quantity += ing.grossQty * oi.quantity
+          consumption[key].cost += ing.totalCost * oi.quantity
+        }
+      }
+    }
+
+    res.json(Object.values(consumption).sort((a,b) => b.cost - a.cost))
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
 // ─── RESET DATABASE ───────────────────────────────────────────
 app.post('/api/admin/reset', async (req, res) => {
   try {

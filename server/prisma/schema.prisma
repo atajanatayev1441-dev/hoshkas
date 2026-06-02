@@ -49,6 +49,7 @@ model Item {
   orderItems   OrderItem[]
   active       Boolean     @default(true)
   cost         ItemCost?
+  recipe       Recipe?
   createdAt    DateTime    @default(now())
 }
 
@@ -151,6 +152,7 @@ model StockProduct {
   warehouse      Warehouse?         @relation(fields: [warehouseId], references: [id])
   active         Boolean            @default(true)
   arrivalItems   StockArrivalItem[]
+  recipeItems    RecipeItem[]
   writeoffItems  StockWriteoffItem[]
   inventoryItems InventoryItem[]
   createdAt      DateTime           @default(now())
@@ -321,5 +323,32 @@ model Cashier {
 enum ShiftStatus {
   OPEN
   CLOSED
+}
+// ─── КАЛЬКУЛЯЦИЯ БЛЮД ─────────────────────────────────────────
+model Recipe {
+  id          Int          @id @default(autoincrement())
+  itemId      Int          @unique
+  item        Item         @relation(fields: [itemId], references: [id])
+  yield       Float        @default(1)
+  yieldUnit   String       @default("порция")
+  totalCost   Float        @default(0)
+  notes       String?
+  ingredients RecipeItem[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model RecipeItem {
+  id          Int          @id @default(autoincrement())
+  recipeId    Int
+  recipe      Recipe       @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  productId   Int
+  product     StockProduct @relation(fields: [productId], references: [id])
+  quantity    Float
+  unit        String       @default("г")
+  wastePct    Float        @default(0)
+  grossQty    Float        @default(0)
+  costPrice   Float        @default(0)
+  totalCost   Float        @default(0)
 }
 
