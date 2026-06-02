@@ -938,18 +938,23 @@ app.post('/api/dynamics/import', async (req, res) => {
 app.post('/api/costs/import', async (req, res) => {
   try {
     const { costs } = req.body
-    let created = 0, updated = 0
+    let updated = 0, skipped = 0
     for (const [name, data] of Object.entries(costs)) {
-      const existing = await prisma.itemCost.findUnique({ where: { name } })
-      if (existing) {
-        await prisma.itemCost.update({ where: { name }, data: { cost: data.cost, price: data.price, koef: data.koef } })
-        updated++
-      } else {
-        await prisma.itemCost.create({ data: { name, cost: data.cost, price: data.price, koef: data.koef } })
-        created++
+      // Find item by name
+      const item = await prisma.item.findFirst({ where: { name: { equals: name, mode: 'insensitive' } } })
+      if (!item) { skipped++; continue }
+      await prisma.itemCost.upsert({
+        where: { itemId: item.id },
+        update: { costPrice: data.cost || 0 },
+        create: { itemId: item.id, costPrice: data.cost || 0 }
+      })
+      // Also update item price if we have it
+      if (data.price > 0) {
+        await prisma.item.update({ where: { id: item.id }, data: { price: data.price } })
       }
+      updated++
     }
-    res.json({ ok: true, created, updated })
+    res.json({ ok: true, updated, skipped })
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
@@ -985,7 +990,10 @@ app.get('/api/historical/orders', async (req, res) => {
 // Получить себестоимость
 app.get('/api/costs', async (req, res) => {
   try {
-    res.json(await prisma.itemCost.findMany({ orderBy: { name: 'asc' } }))
+    res.json(await prisma.itemCost.findMany({ 
+      include: { item: { select: { name: true, price: true, category: { select: { name: true } } } } },
+      orderBy: { id: 'asc' }
+    }))
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
