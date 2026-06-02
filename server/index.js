@@ -1028,6 +1028,33 @@ app.get('/api/historical/summary', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
+
+// ─── RESET DATABASE ───────────────────────────────────────────
+app.post('/api/admin/reset', async (req, res) => {
+  try {
+    const { confirmKey } = req.body
+    if (confirmKey !== (process.env.RESET_KEY || 'reset-hos-2024')) {
+      return res.status(403).json({ error: 'Неверный ключ' })
+    }
+    // Delete in correct order (dependencies first)
+    await prisma.inventoryItem.deleteMany()
+    await prisma.inventory.deleteMany()
+    await prisma.stockWriteoffItem.deleteMany()
+    await prisma.stockWriteoff.deleteMany()
+    await prisma.stockArrivalItem.deleteMany()
+    await prisma.stockArrival.deleteMany()
+    await prisma.orderItem.deleteMany()
+    await prisma.order.deleteMany()
+    await prisma.historicalOrder.deleteMany()
+    await prisma.salesDynamics.deleteMany()
+    await prisma.itemCost.deleteMany()
+    await prisma.debt.deleteMany()
+    await prisma.expense.deleteMany()
+    await prisma.revision.deleteMany()
+    res.json({ ok: true, message: 'База очищена — заказы, долги, расходы, исторические данные удалены. Меню, официанты и склад сохранены.' })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
 // ─── STATIC & CATCH-ALL (must be last) ───────────────────────
 const waiterPath = join(__dirname, '..', 'public-waiter')
 app.use('/waiter', express.static(waiterPath))
