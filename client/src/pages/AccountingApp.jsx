@@ -142,11 +142,22 @@ function Dashboard() {
   async function load() {
     setLoading(true)
     const t = today()
-    const [s, d] = await Promise.all([
+    const [s, hist, d] = await Promise.all([
       fetch(`${API}/accounting/full-summary?from=${t}&to=${t}`).then(r=>r.json()),
+      fetch(`${API}/historical/summary?from=${t}&to=${t}`).then(r=>r.json()).catch(()=>({})),
       fetch(`${API}/debts`).then(r=>r.json())
     ])
-    setSummary(s); setDebts(d.filter(x=>x.status==='UNPAID')); setLoading(false)
+    // Merge current + historical
+    const merged = {
+      ...s,
+      revenue: (s.revenue||0) + (hist.totalRevenue||0),
+      totalOrders: (s.totalOrders||0) + (hist.totalOrders||0),
+      byCash: (s.byCash||0) + (hist.byCash||0),
+      byCard: (s.byCard||0) + (hist.byCard||0),
+    }
+    merged.profit = merged.revenue - (s.totalExpenses||0)
+    merged.avgCheck = merged.totalOrders > 0 ? merged.revenue / merged.totalOrders : 0
+    setSummary(merged); setDebts(d.filter(x=>x.status==='UNPAID')); setLoading(false)
   }
 
   if (loading) return <Loader />
@@ -218,14 +229,14 @@ function OrdersReport() {
   async function load() {
     setLoading(true)
     const params = new URLSearchParams({ from, to })
-    if (status) params.set('status', status)
-    const data = await fetch(`${API}/accounting/orders?${params}`).then(r=>r.json()).catch(()=>[])
-    setOrders(Array.isArray(data) ? data : [])
+    if (status) params.set('payType', status)
+    const res = await fetch(`${API}/historical/orders?${params}`).then(r=>r.json()).catch(()=>({}))
+    setOrders(Array.isArray(res.orders) ? res.orders : [])
     setLoading(false)
   }
 
-  const total = orders.filter(o=>o.status==='PAID').reduce((s,o)=>s+o.total, 0)
-  const cancelled = orders.filter(o=>o.status==='CANCELLED').length
+  const total = orders.reduce((s,o)=>s+o.total, 0)
+  const cancelled = 0
 
   return (
     <div style={{ padding:24, maxWidth:1100, margin:'0 auto' }}>
@@ -235,10 +246,9 @@ function OrdersReport() {
         <span style={{ color:'#888' }}>—</span>
         <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={{...inputSt, width:150}} />
         <select value={status} onChange={e=>setStatus(e.target.value)} style={{...inputSt, width:160}}>
-          <option value="">Все статусы</option>
-          <option value="PAID">Оплаченные</option>
-          <option value="CANCELLED">Отказные</option>
-          <option value="OPEN">Открытые</option>
+          <option value="">Все типы оплаты</option>
+          <option value="CASH">Наличные</option>
+          <option value="CARD">Карта</option>
         </select>
         <div style={{ display:'flex', gap:10, marginLeft:'auto' }}>
           <div style={{ background:'#eafaf1', borderRadius:10, padding:'8px 14px', fontWeight:700, color:'#27ae60', border:'1px solid #abebc6' }}>Выручка: {fmt(total)} TMT</div>
@@ -264,19 +274,19 @@ function OrdersReport() {
                       <tr onClick={() => setExpanded(expanded===o.id ? null : o.id)}
                         style={{ borderBottom:'1px solid #f5f5f5', cursor:'pointer', background: expanded===o.id?'#f8f9fa':'#fff' }}>
                         <td style={{ padding:'10px 12px', fontWeight:600, color:'#1a1a2e' }}>#{o.number}</td>
-                        <td style={{ padding:'10px 12px', color:'#666' }}>{fmtDateTime(o.createdAt)}</td>
-                        <td style={{ padding:'10px 12px' }}>{o.tableNumber || '—'}</td>
-                        <td style={{ padding:'10px 12px' }}>{o.waiterName || '—'}</td>
-                        <td style={{ padding:'10px 12px', textAlign:'center' }}>{o.items?.length || 0}</td>
+                        <td style={{ padding:'10px 12px', color:'#666' }}>{o.date ? fmtDateTime(o.date) : fmtDateTime(o.createdAt)}</td>
+                        <td style={{ padding:'10px 12px' }}>{o.tableNumber || o.table || '—'}{o.hall && o.hall!==o.tableNumber ? ` (${o.hall})` : ''}</td>
+                        <td style={{ padding:'10px 12px' }}>{o.waiter || o.waiterName || o.cashier || '—'}</td>
+                        <td style={{ padding:'10px 12px', textAlign:'center' }}>{o.items?.length || '—'}</td>
                         <td style={{ padding:'10px 12px', fontWeight:700, color:'#27ae60' }}>{fmt(o.total)} TMT</td>
                         <td style={{ padding:'10px 12px' }}>
-                          <span style={{ background: o.paymentType==='CARD'?'#ebf5fb':'#eafaf1', color:o.paymentType==='CARD'?'#2980b9':'#27ae60', borderRadius:6, padding:'3px 8px', fontSize:12, fontWeight:600 }}>
-                            {o.paymentType==='CARD' ? 'Карта' : 'Нал'}
+                          <span style={{ background: (o.payType||o.paymentType)==='CARD'?'#ebf5fb':'#eafaf1', color:(o.payType||o.paymentType)==='CARD'?'#2980b9':'#27ae60', borderRadius:6, padding:'3px 8px', fontSize:12, fontWeight:600 }}>
+                            {(o.payType||o.paymentType)==='CARD' ? 'Карта' : 'Нал'}
                           </span>
                         </td>
                         <td style={{ padding:'10px 12px' }}>
-                          <span style={{ background:o.status==='PAID'?'#eafaf1':o.status==='CANCELLED'?'#fdf0ef':'#fef9e7', color:o.status==='PAID'?'#27ae60':o.status==='CANCELLED'?'#e74c3c':'#f39c12', borderRadius:6, padding:'3px 8px', fontSize:12, fontWeight:600 }}>
-                            {o.status==='PAID'?'Оплачен':o.status==='CANCELLED'?'Отказной':o.status==='OPEN'?'Открыт':'В процессе'}
+                          <span style={{ background:'#eafaf1', color:'#27ae60', borderRadius:6, padding:'3px 8px', fontSize:12, fontWeight:600 }}>
+                            {o.source || 'ATLANT'}
                           </span>
                         </td>
                       </tr>
@@ -316,7 +326,8 @@ function DepartmentsReport() {
 
   async function load() {
     setLoading(true)
-    const d = await fetch(`${API}/accounting/by-department?from=${from}&to=${to}`).then(r=>r.json()).catch(()=>({}))
+    const res = await fetch(`${API}/historical/summary?from=${from}&to=${to}`).then(r=>r.json()).catch(()=>({}))
+    const d = { byWaiter: res.byWaiter || [], byDay: res.byDay || [], totalRevenue: res.totalRevenue || 0 }
     setData(d); setLoading(false)
   }
 
@@ -381,7 +392,8 @@ function StaffReport() {
 
   async function load() {
     setLoading(true)
-    const d = await fetch(`${API}/accounting/staff-report?from=${from}&to=${to}`).then(r=>r.json()).catch(()=>[])
+    const res = await fetch(`${API}/historical/summary?from=${from}&to=${to}`).then(r=>r.json()).catch(()=>({}))
+    const d = res.byWaiter || []
     setData(Array.isArray(d) ? d : []); setLoading(false)
   }
 
