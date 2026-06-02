@@ -7,26 +7,52 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── СПРАВОЧНИК СКЛАДОВ ───────────────────────────────────────
+model Warehouse {
+  id           Int            @id @default(autoincrement())
+  name         String         @unique
+  active       Boolean        @default(true)
+  departments  Department[]
+  stockProducts StockProduct[]
+  createdAt    DateTime       @default(now())
+}
+
+// ─── СПРАВОЧНИК ПОДРАЗДЕЛЕНИЙ ─────────────────────────────────
+model Department {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  warehouseId Int
+  warehouse   Warehouse    @relation(fields: [warehouseId], references: [id])
+  active      Boolean      @default(true)
+  items       Item[]
+  createdAt   DateTime     @default(now())
+}
+
+// ─── МЕНЮ ────────────────────────────────────────────────────
 model Category {
-  id        Int      @id @default(autoincrement())
-  name      String
-  items     Item[]
-  createdAt DateTime @default(now())
+  id           Int      @id @default(autoincrement())
+  name         String
+  sortOrder    Int      @default(0)
+  active       Boolean  @default(true)
+  items        Item[]
+  createdAt    DateTime @default(now())
 }
 
 model Item {
-  id         Int         @id @default(autoincrement())
-  name       String
-  price      Float
-  categoryId Int
-  category   Category    @relation(fields: [categoryId], references: [id])
-  orderItems OrderItem[]
-  active     Boolean     @default(true)
-  department String      @default("KITCHEN")
-  cost       ItemCost?
-  createdAt  DateTime    @default(now())
+  id           Int         @id @default(autoincrement())
+  name         String
+  price        Float
+  categoryId   Int
+  category     Category    @relation(fields: [categoryId], references: [id])
+  departmentId Int?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  orderItems   OrderItem[]
+  active       Boolean     @default(true)
+  cost         ItemCost?
+  createdAt    DateTime    @default(now())
 }
 
+// ─── ПЕРСОНАЛ ────────────────────────────────────────────────
 model Waiter {
   id        Int      @id @default(autoincrement())
   name      String
@@ -36,6 +62,7 @@ model Waiter {
   createdAt DateTime @default(now())
 }
 
+// ─── ЗАКАЗЫ ──────────────────────────────────────────────────
 model Order {
   id          Int         @id @default(autoincrement())
   number      Int         @unique
@@ -64,7 +91,6 @@ model OrderItem {
 }
 
 // ─── БУХГАЛТЕРИЯ ─────────────────────────────────────────────
-
 model Expense {
   id          Int             @id @default(autoincrement())
   amount      Float
@@ -105,29 +131,29 @@ model AccountingUser {
 }
 
 // ─── СКЛАД ────────────────────────────────────────────────────
-
 model Supplier {
-  id        Int       @id @default(autoincrement())
+  id        Int            @id @default(autoincrement())
   name      String
   phone     String?
-  active    Boolean   @default(true)
+  active    Boolean        @default(true)
   arrivals  StockArrival[]
-  createdAt DateTime  @default(now())
+  createdAt DateTime       @default(now())
 }
 
 model StockProduct {
-  id            Int              @id @default(autoincrement())
-  name          String
-  unit          String           @default("шт")
-  costPrice     Float            @default(0)
-  currentStock  Float            @default(0)
-  minStock      Float            @default(0)
-  department    String           @default("KITCHEN")
-  active        Boolean          @default(true)
-  arrivalItems  StockArrivalItem[]
-  writeoffItems StockWriteoffItem[]
+  id             Int                @id @default(autoincrement())
+  name           String
+  unit           String             @default("шт")
+  costPrice      Float              @default(0)
+  currentStock   Float              @default(0)
+  minStock       Float              @default(0)
+  warehouseId    Int?
+  warehouse      Warehouse?         @relation(fields: [warehouseId], references: [id])
+  active         Boolean            @default(true)
+  arrivalItems   StockArrivalItem[]
+  writeoffItems  StockWriteoffItem[]
   inventoryItems InventoryItem[]
-  createdAt     DateTime         @default(now())
+  createdAt      DateTime           @default(now())
 }
 
 model StockArrival {
@@ -144,34 +170,34 @@ model StockArrival {
 }
 
 model StockArrivalItem {
-  id         Int          @id @default(autoincrement())
-  arrivalId  Int
-  arrival    StockArrival @relation(fields: [arrivalId], references: [id], onDelete: Cascade)
-  productId  Int
-  product    StockProduct @relation(fields: [productId], references: [id])
-  quantity   Float
-  price      Float
-  total      Float
+  id        Int          @id @default(autoincrement())
+  arrivalId Int
+  arrival   StockArrival @relation(fields: [arrivalId], references: [id], onDelete: Cascade)
+  productId Int
+  product   StockProduct @relation(fields: [productId], references: [id])
+  quantity  Float
+  price     Float
+  total     Float
 }
 
 model StockWriteoff {
-  id        Int                @id @default(autoincrement())
-  date      DateTime           @default(now())
+  id        Int                 @id @default(autoincrement())
+  date      DateTime            @default(now())
   reason    String?
   notes     String?
   createdBy String?
   items     StockWriteoffItem[]
-  createdAt DateTime           @default(now())
+  createdAt DateTime            @default(now())
 }
 
 model StockWriteoffItem {
-  id          Int           @id @default(autoincrement())
-  writeoffId  Int
-  writeoff    StockWriteoff @relation(fields: [writeoffId], references: [id], onDelete: Cascade)
-  productId   Int
-  product     StockProduct  @relation(fields: [productId], references: [id])
-  quantity    Float
-  reason      String?
+  id         Int           @id @default(autoincrement())
+  writeoffId Int
+  writeoff   StockWriteoff @relation(fields: [writeoffId], references: [id], onDelete: Cascade)
+  productId  Int
+  product    StockProduct  @relation(fields: [productId], references: [id])
+  quantity   Float
+  reason     String?
 }
 
 model Inventory {
@@ -195,7 +221,6 @@ model InventoryItem {
 }
 
 // ─── КОНТРОЛЬ ЦЕН ─────────────────────────────────────────────
-
 model ItemCost {
   id        Int      @id @default(autoincrement())
   itemId    Int      @unique
@@ -204,6 +229,7 @@ model ItemCost {
   updatedAt DateTime @updatedAt
 }
 
+// ─── ENUMS ────────────────────────────────────────────────────
 enum OrderStatus {
   OPEN
   PENDING

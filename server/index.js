@@ -39,6 +39,42 @@ app.use(express.json())
 const publicPath = join(__dirname, '..', 'public')
 app.use(express.static(publicPath))
 
+// ─── WAREHOUSES ──────────────────────────────────────────────
+app.get('/api/warehouses', async (req, res) => {
+  try { res.json(await prisma.warehouse.findMany({ where: { active: true }, include: { departments: { where: { active: true } } }, orderBy: { name: 'asc' } })) }
+  catch (e) { res.status(500).json({ error: e.message }) }
+})
+app.post('/api/warehouses', async (req, res) => {
+  try { res.json(await prisma.warehouse.create({ data: { name: req.body.name } })) }
+  catch (e) { res.status(500).json({ error: e.message }) }
+})
+app.put('/api/warehouses/:id', async (req, res) => {
+  try { res.json(await prisma.warehouse.update({ where: { id: Number(req.params.id) }, data: { name: req.body.name, active: req.body.active } })) }
+  catch (e) { res.status(500).json({ error: e.message }) }
+})
+app.delete('/api/warehouses/:id', async (req, res) => {
+  try { await prisma.warehouse.update({ where: { id: Number(req.params.id) }, data: { active: false } }); res.json({ ok: true }) }
+  catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── DEPARTMENTS ──────────────────────────────────────────────
+app.get('/api/departments', async (req, res) => {
+  try { res.json(await prisma.department.findMany({ where: { active: true }, include: { warehouse: true }, orderBy: { name: 'asc' } })) }
+  catch (e) { res.status(500).json({ error: e.message }) }
+})
+app.post('/api/departments', async (req, res) => {
+  try { res.json(await prisma.department.create({ data: { name: req.body.name, warehouseId: Number(req.body.warehouseId) } })) }
+  catch (e) { res.status(500).json({ error: e.message }) }
+})
+app.put('/api/departments/:id', async (req, res) => {
+  try { res.json(await prisma.department.update({ where: { id: Number(req.params.id) }, data: { name: req.body.name, warehouseId: Number(req.body.warehouseId), active: req.body.active } })) }
+  catch (e) { res.status(500).json({ error: e.message }) }
+})
+app.delete('/api/departments/:id', async (req, res) => {
+  try { await prisma.department.update({ where: { id: Number(req.params.id) }, data: { active: false } }); res.json({ ok: true }) }
+  catch (e) { res.status(500).json({ error: e.message }) }
+})
+
 // ─── WAITERS ─────────────────────────────────────────────────
 app.get('/api/waiters', async (req, res) => {
   try { res.json(await prisma.waiter.findMany({ where: { active: true }, orderBy: { name: 'asc' } })) }
@@ -68,33 +104,38 @@ app.post('/api/waiters/login', async (req, res) => {
 
 // ─── CATEGORIES ──────────────────────────────────────────────
 app.get('/api/categories', async (req, res) => {
-  try { res.json(await prisma.category.findMany({ include: { items: { where: { active: true } } }, orderBy: { id: 'asc' } })) }
-  catch (e) { res.status(500).json({ error: e.message }) }
+  try {
+    res.json(await prisma.category.findMany({ where: { active: true }, include: { items: { where: { active: true }, include: { department: true } } }, orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] }))
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 app.post('/api/categories', async (req, res) => {
-  try { res.json(await prisma.category.create({ data: { name: req.body.name } })) }
+  try { res.json(await prisma.category.create({ data: { name: req.body.name, sortOrder: req.body.sortOrder || 0 } })) }
+  catch (e) { res.status(500).json({ error: e.message }) }
+})
+app.put('/api/categories/:id', async (req, res) => {
+  try { res.json(await prisma.category.update({ where: { id: Number(req.params.id) }, data: { name: req.body.name, sortOrder: req.body.sortOrder, active: req.body.active } })) }
   catch (e) { res.status(500).json({ error: e.message }) }
 })
 app.delete('/api/categories/:id', async (req, res) => {
-  try { await prisma.category.delete({ where: { id: Number(req.params.id) } }); res.json({ ok: true }) }
+  try { await prisma.category.update({ where: { id: Number(req.params.id) }, data: { active: false } }); res.json({ ok: true }) }
   catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 // ─── ITEMS ───────────────────────────────────────────────────
 app.get('/api/items', async (req, res) => {
-  try { res.json(await prisma.item.findMany({ include: { category: true }, orderBy: { id: 'asc' } })) }
+  try { res.json(await prisma.item.findMany({ include: { category: true, department: true }, orderBy: { id: 'asc' } })) }
   catch (e) { res.status(500).json({ error: e.message }) }
 })
 app.post('/api/items', async (req, res) => {
   try {
-    const { name, price, categoryId } = req.body
-    res.json(await prisma.item.create({ data: { name, price: parseFloat(price), categoryId: Number(categoryId) } }))
+    const { name, price, categoryId, departmentId } = req.body
+    res.json(await prisma.item.create({ data: { name, price: parseFloat(price), categoryId: Number(categoryId), departmentId: departmentId ? Number(departmentId) : null } }))
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 app.put('/api/items/:id', async (req, res) => {
   try {
-    const { name, price, categoryId, active } = req.body
-    res.json(await prisma.item.update({ where: { id: Number(req.params.id) }, data: { name, price: parseFloat(price), categoryId: Number(categoryId), active } }))
+    const { name, price, categoryId, departmentId, active } = req.body
+    res.json(await prisma.item.update({ where: { id: Number(req.params.id) }, data: { name, price: parseFloat(price), categoryId: Number(categoryId), departmentId: departmentId ? Number(departmentId) : null, active } }))
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 app.delete('/api/items/:id', async (req, res) => {
@@ -591,19 +632,19 @@ app.delete('/api/stock/suppliers/:id', async (req, res) => {
 
 // ─── СКЛАД: ТОВАРЫ ────────────────────────────────────────────
 app.get('/api/stock/products', async (req, res) => {
-  try { res.json(await prisma.stockProduct.findMany({ where: { active: true }, orderBy: { name: 'asc' } })) }
+  try { res.json(await prisma.stockProduct.findMany({ where: { active: true }, include: { warehouse: true }, orderBy: { name: 'asc' } })) }
   catch(e) { res.status(500).json({ error: e.message }) }
 })
 app.post('/api/stock/products', async (req, res) => {
   try {
-    const { name, unit, costPrice, minStock, department } = req.body
-    res.json(await prisma.stockProduct.create({ data: { name, unit: unit||'шт', costPrice: parseFloat(costPrice||0), minStock: parseFloat(minStock||0), department: department||'KITCHEN' } }))
+    const { name, unit, costPrice, minStock, warehouseId } = req.body
+    res.json(await prisma.stockProduct.create({ data: { name, unit: unit||'шт', costPrice: parseFloat(costPrice||0), minStock: parseFloat(minStock||0), warehouseId: warehouseId ? Number(warehouseId) : null } }))
   } catch(e) { res.status(500).json({ error: e.message }) }
 })
 app.put('/api/stock/products/:id', async (req, res) => {
   try {
-    const { name, unit, costPrice, minStock, department } = req.body
-    res.json(await prisma.stockProduct.update({ where: { id: Number(req.params.id) }, data: { name, unit, costPrice: parseFloat(costPrice||0), minStock: parseFloat(minStock||0), department } }))
+    const { name, unit, costPrice, minStock, warehouseId } = req.body
+    res.json(await prisma.stockProduct.update({ where: { id: Number(req.params.id) }, data: { name, unit, costPrice: parseFloat(costPrice||0), minStock: parseFloat(minStock||0), warehouseId: warehouseId ? Number(warehouseId) : null } }))
   } catch(e) { res.status(500).json({ error: e.message }) }
 })
 app.delete('/api/stock/products/:id', async (req, res) => {
