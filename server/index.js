@@ -163,6 +163,20 @@ app.get('/api/orders', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
+
+// Последние чеки для кассы
+app.get('/api/orders/recent', async (req, res) => {
+  try {
+    const { limit = 20 } = req.query
+    res.json(await prisma.order.findMany({
+      where: { status: { in: ['PAID', 'CANCELLED'] } },
+      include: { items: true, waiter: true },
+      orderBy: { createdAt: 'desc' },
+      take: Number(limit)
+    }))
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
 app.get('/api/orders/pending', async (req, res) => {
   try {
     res.json(await prisma.order.findMany({
@@ -257,6 +271,21 @@ app.put('/api/orders/:id/accept', async (req, res) => {
       include: { items: true, waiter: true }
     })
     broadcast('order_accepted', order)
+    // Auto-sync: update shift totals if shift is open
+    try {
+      const shift = await prisma.shift.findFirst({ where: { status: 'OPEN' }, orderBy: { openedAt: 'desc' } })
+      if (shift) {
+        const shiftOrders = await prisma.order.findMany({ where: { status: 'PAID', createdAt: { gte: shift.openedAt } } })
+        await prisma.shift.update({
+          where: { id: shift.id },
+          data: {
+            totalCash: shiftOrders.filter(o=>o.paymentType==='CASH').reduce((s,o)=>s+o.total,0),
+            totalCard: shiftOrders.filter(o=>o.paymentType==='CARD').reduce((s,o)=>s+o.total,0),
+            totalOrders: shiftOrders.length
+          }
+        })
+      }
+    } catch(e) { console.error('Shift sync error:', e.message) }
     res.json(order)
   } catch (e) { res.status(500).json({ error: e.message }) }
 })

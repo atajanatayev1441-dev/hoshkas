@@ -27,7 +27,8 @@ export default function CashierPage() {
   const [paymentType, setPaymentType] = useState('CASH')
   const [loading, setLoading] = useState(false)
   const [lastOrder, setLastOrder] = useState(null)
-  const [activeTab, setActiveTab] = useState('tables') // 'tables' | 'queue' | 'direct'
+  const [activeTab, setActiveTab] = useState('tables') // 'tables' | 'queue' | 'direct' | 'history'
+  const [recentOrders, setRecentOrders] = useState([])
   const [acceptingId, setAcceptingId] = useState(null)
   const [acceptPayment, setAcceptPayment] = useState({})
 
@@ -38,9 +39,17 @@ export default function CashierPage() {
       .then(r => r.json())
       .then(data => { setCategories(data); if (data.length > 0) setActiveCategory(data[0].id) })
     loadAllOrders()
+    loadRecentOrders()
     connectWS()
     return () => wsRef.current?.close()
   }, [])
+
+  async function loadRecentOrders() {
+    try {
+      const data = await fetch(`${API}/orders/recent?limit=50`).then(r => r.json())
+      setRecentOrders(Array.isArray(data) ? data : [])
+    } catch {}
+  }
 
   function connectWS() {
     const ws = new WebSocket(WS_URL)
@@ -215,6 +224,7 @@ export default function CashierPage() {
       setActiveOrder(null)
       setCart([])
       setSelectedTable(null)
+      loadRecentOrders()
     } catch (e) { alert('Ошибка: ' + e.message) }
     setLoading(false)
   }
@@ -283,6 +293,10 @@ export default function CashierPage() {
         <button className={activeTab === 'direct' ? 'active' : ''} onClick={() => { setActiveTab('direct'); setSelectedTable(null) }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
           Быстрая продажа
+        </button>
+        <button className={activeTab === 'history' ? 'active' : ''} onClick={() => { setActiveTab('history'); loadRecentOrders() }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          История чеков
         </button>
       </div>
 
@@ -558,6 +572,55 @@ export default function CashierPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ИСТОРИЯ ЧЕКОВ */}
+      {activeTab === 'history' && (
+        <div style={{ flex:1, overflow:'auto', padding:20, background:'var(--bg)' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+            <div style={{ fontSize:17, fontWeight:700, color:'var(--brand)' }}>История чеков</div>
+            <button onClick={loadRecentOrders}
+              style={{ background:'none', border:'1.5px solid var(--border)', borderRadius:8, padding:'6px 14px', cursor:'pointer', fontSize:13, color:'var(--text-muted)', display:'flex', alignItems:'center', gap:5, fontFamily:'inherit' }}>
+              ↻ Обновить
+            </button>
+          </div>
+          {recentOrders.length === 0 && (
+            <div style={{ textAlign:'center', padding:40, color:'var(--text-muted)' }}>Нет чеков</div>
+          )}
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {recentOrders.map(order => (
+              <div key={order.id} style={{ background:'var(--surface)', borderRadius:14, padding:'14px 18px', boxShadow:'var(--shadow-sm)', border:'1px solid var(--border)', display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
+                <span style={{ fontSize:15, fontWeight:800, color:'var(--brand)', minWidth:50 }}>#{order.number}</span>
+                <span style={{ fontSize:12, color:'var(--text-muted)' }}>
+                  {new Date(order.createdAt).toLocaleString('ru-RU', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}
+                </span>
+                <span style={{ fontSize:13, color:'var(--text-muted)' }}>Стол {order.tableNumber || '—'}</span>
+                {order.waiterName && <span style={{ fontSize:13, color:'var(--text-muted)' }}>{order.waiterName}</span>}
+                <div style={{ flex:1, fontSize:12, color:'var(--text-muted)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  {(order.items||[]).map(i=>`${i.name} ×${i.quantity}`).join(' · ')}
+                </div>
+                <span style={{ fontSize:12, padding:'3px 10px', borderRadius:20, fontWeight:600,
+                  background: order.status==='PAID' ? 'var(--green-light)' : 'var(--red-light)',
+                  color: order.status==='PAID' ? 'var(--green)' : 'var(--red)' }}>
+                  {order.status==='PAID' ? 'Оплачен' : 'Отменён'}
+                </span>
+                <span style={{ fontSize:12, padding:'3px 10px', borderRadius:20, fontWeight:600,
+                  background: order.paymentType==='CARD' ? 'var(--blue-light)' : 'var(--green-light)',
+                  color: order.paymentType==='CARD' ? 'var(--blue)' : 'var(--green)' }}>
+                  {order.paymentType==='CARD' ? 'Карта' : 'Наличные'}
+                </span>
+                <span style={{ fontSize:15, fontWeight:800, color:'var(--brand)' }}>{order.total?.toFixed(0)} TMT</span>
+                {order.status==='PAID' && (
+                  <button onClick={() => printReceipt(order)}
+                    style={{ background:'var(--brand)', color:'#fff', border:'none', borderRadius:8, padding:'6px 12px', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', display:'flex', alignItems:'center', gap:5 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                    Печать
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
