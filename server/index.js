@@ -1037,6 +1037,244 @@ app.get('/api/historical/summary', async (req, res) => {
 })
 
 
+
+
+// ─── СКЛАД ────────────────────────────────────────────────────
+app.get('/api/stock/products', async (req, res) => {
+  try {
+    res.json(await prisma.stockProduct.findMany({
+      where: { active: true },
+      include: { warehouse: true },
+      orderBy: { name: 'asc' }
+    }))
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/api/stock/products', async (req, res) => {
+  try {
+    const { name, unit, costPrice, minStock, warehouseId } = req.body
+    res.json(await prisma.stockProduct.create({
+      data: { name, unit: unit||'шт', costPrice: parseFloat(costPrice||0), minStock: parseFloat(minStock||0), warehouseId: warehouseId?Number(warehouseId):null }
+    }))
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+app.put('/api/stock/products/:id', async (req, res) => {
+  try {
+    const { name, unit, costPrice, minStock, warehouseId } = req.body
+    res.json(await prisma.stockProduct.update({
+      where: { id: Number(req.params.id) },
+      data: { name, unit, costPrice: parseFloat(costPrice||0), minStock: parseFloat(minStock||0), warehouseId: warehouseId?Number(warehouseId):null }
+    }))
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/api/stock/products/:id', async (req, res) => {
+  try {
+    await prisma.stockProduct.update({ where: { id: Number(req.params.id) }, data: { active: false } })
+    res.json({ ok: true })
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// Поставщики
+app.get('/api/stock/suppliers', async (req, res) => {
+  try { res.json(await prisma.supplier.findMany({ where: { active: true }, orderBy: { name: 'asc' } })) }
+  catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/api/stock/suppliers', async (req, res) => {
+  try { res.json(await prisma.supplier.create({ data: { name: req.body.name, phone: req.body.phone } })) }
+  catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// Поступления
+app.get('/api/stock/arrivals', async (req, res) => {
+  try {
+    res.json(await prisma.stockArrival.findMany({
+      include: { supplier: true, items: { include: { product: true } } },
+      orderBy: { date: 'desc' }, take: 50
+    }))
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/api/stock/arrivals', async (req, res) => {
+  try {
+    const { supplierId, invoiceNum, notes, createdBy, items } = req.body
+    const totalAmount = items.reduce((s,i) => s + (i.quantity * i.price), 0)
+    const arrival = await prisma.stockArrival.create({
+      data: {
+        supplierId: supplierId||null, invoiceNum, notes, createdBy,
+        totalAmount,
+        items: { create: items.map(i => ({ productId: i.productId, quantity: i.quantity, price: i.price, total: i.quantity * i.price })) }
+      },
+      include: { items: true }
+    })
+    // Update stock
+    for (const item of items) {
+      await prisma.stockProduct.update({
+        where: { id: item.productId },
+        data: { currentStock: { increment: item.quantity }, costPrice: item.price > 0 ? item.price : undefined }
+      })
+    }
+    res.json(arrival)
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// Списания
+app.get('/api/stock/writeoffs', async (req, res) => {
+  try {
+    res.json(await prisma.stockWriteoff.findMany({
+      include: { items: { include: { product: true } } },
+      orderBy: { date: 'desc' }, take: 50
+    }))
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/api/stock/writeoffs', async (req, res) => {
+  try {
+    const { reason, notes, createdBy, items } = req.body
+    const writeoff = await prisma.stockWriteoff.create({
+      data: {
+        reason, notes, createdBy,
+        items: { create: items.map(i => ({ productId: i.productId, quantity: i.quantity, reason: i.reason })) }
+      },
+      include: { items: true }
+    })
+    for (const item of items) {
+      await prisma.stockProduct.update({
+        where: { id: item.productId },
+        data: { currentStock: { decrement: item.quantity } }
+      })
+    }
+    res.json(writeoff)
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// Инвентаризация
+app.get('/api/stock/inventories', async (req, res) => {
+  try {
+    res.json(await prisma.inventory.findMany({
+      include: { items: { include: { product: true } } },
+      orderBy: { date: 'desc' }, take: 20
+    }))
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/api/stock/inventories', async (req, res) => {
+  try {
+    const { notes, createdBy, items } = req.body
+    const inventory = await prisma.inventory.create({
+      data: {
+        notes, createdBy,
+        items: { create: items.map(i => ({ productId: i.productId, expected: i.expected, actual: i.actual, diff: i.diff })) }
+      },
+      include: { items: true }
+    })
+    // Update actual stock
+    for (const item of items) {
+      await prisma.stockProduct.update({
+        where: { id: item.productId },
+        data: { currentStock: item.actual }
+      })
+    }
+    res.json(inventory)
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── КАССИРЫ ──────────────────────────────────────────────────
+app.get('/api/cashiers', async (req, res) => {
+  try { res.json(await prisma.cashier.findMany({ where: { active: true }, orderBy: { name: 'asc' } })) }
+  catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/api/cashiers', async (req, res) => {
+  try {
+    const { name, pin } = req.body
+    res.json(await prisma.cashier.create({ data: { name, pin } }))
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.put('/api/cashiers/:id', async (req, res) => {
+  try {
+    const { name, pin, active } = req.body
+    res.json(await prisma.cashier.update({ where: { id: Number(req.params.id) }, data: { name, pin, active } }))
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.delete('/api/cashiers/:id', async (req, res) => {
+  try {
+    await prisma.cashier.update({ where: { id: Number(req.params.id) }, data: { active: false } })
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/api/cashiers/login', async (req, res) => {
+  try {
+    const { pin } = req.body
+    const cashier = await prisma.cashier.findUnique({ where: { pin } })
+    if (!cashier || !cashier.active) return res.status(401).json({ error: 'Неверный PIN' })
+    res.json(cashier)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── СМЕНЫ ────────────────────────────────────────────────────
+app.get('/api/shifts', async (req, res) => {
+  try {
+    const { limit = 20 } = req.query
+    res.json(await prisma.shift.findMany({ orderBy: { openedAt: 'desc' }, take: Number(limit) }))
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/api/shifts/current', async (req, res) => {
+  try {
+    const shift = await prisma.shift.findFirst({ where: { status: 'OPEN' }, orderBy: { openedAt: 'desc' } })
+    res.json(shift || null)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/api/shifts/open', async (req, res) => {
+  try {
+    const { cashierName, cashierPin, openCash } = req.body
+    // Check no open shift
+    const existing = await prisma.shift.findFirst({ where: { status: 'OPEN' } })
+    if (existing) return res.status(400).json({ error: 'Смена уже открыта', shift: existing })
+    const shift = await prisma.shift.create({
+      data: { cashierName, cashierPin, openCash: parseFloat(openCash || 0) }
+    })
+    broadcast('shift_opened', shift)
+    res.json(shift)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/api/shifts/:id/close', async (req, res) => {
+  try {
+    const { closeCash, notes } = req.body
+    const id = Number(req.params.id)
+    // Calculate totals from orders during this shift
+    const shift = await prisma.shift.findUnique({ where: { id } })
+    if (!shift) return res.status(404).json({ error: 'Смена не найдена' })
+    const orders = await prisma.order.findMany({
+      where: { status: 'PAID', createdAt: { gte: shift.openedAt } }
+    })
+    const totalCash = orders.filter(o => o.paymentType === 'CASH').reduce((s, o) => s + o.total, 0)
+    const totalCard = orders.filter(o => o.paymentType === 'CARD').reduce((s, o) => s + o.total, 0)
+    const closed = await prisma.shift.update({
+      where: { id },
+      data: {
+        status: 'CLOSED',
+        closedAt: new Date(),
+        closeCash: parseFloat(closeCash || 0),
+        totalCash,
+        totalCard,
+        totalOrders: orders.length,
+        notes
+      }
+    })
+    broadcast('shift_closed', closed)
+    res.json(closed)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
 // ─── RESET DATABASE ───────────────────────────────────────────
 app.post('/api/admin/reset', async (req, res) => {
   try {

@@ -292,3 +292,34 @@ model SalesDynamics {
   total     Int      @default(0)
   createdAt DateTime @default(now())
 }
+// ─── СМЕНЫ ────────────────────────────────────────────────────
+model Shift {
+  id          Int       @id @default(autoincrement())
+  cashierName String
+  cashierPin  String?
+  status      ShiftStatus @default(OPEN)
+  openedAt    DateTime  @default(now())
+  closedAt    DateTime?
+  openCash    Float     @default(0)
+  closeCash   Float?
+  totalCash   Float     @default(0)
+  totalCard   Float     @default(0)
+  totalOrders Int       @default(0)
+  notes       String?
+  createdAt   DateTime  @default(now())
+}
+
+// ─── КАССИРЫ ──────────────────────────────────────────────────
+model Cashier {
+  id        Int      @id @default(autoincrement())
+  name      String
+  pin       String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+
