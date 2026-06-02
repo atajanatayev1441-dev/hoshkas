@@ -163,7 +163,20 @@ function Products() {
                   <td style={{ padding:'12px 16px', color:'#888' }}>{p.unit}</td>
                   <td style={{ padding:'12px 16px', fontWeight:700, color: low?'#e74c3c':'#1a1a2e' }}>{fmt(p.currentStock)}</td>
                   <td style={{ padding:'12px 16px', color:'#aaa' }}>{p.minStock||'—'}</td>
-                  <td style={{ padding:'12px 16px', color:'#c9a96e', fontWeight:600 }}>{p.costPrice>0?`${fmt(p.costPrice)} TMT`:'—'}</td>
+                  <td style={{ padding:'12px 16px', fontWeight:600 }}>
+                    {p.costPrice>0 ? (
+                      <span style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <span style={{ color:'#c9a96e' }}>{fmt(p.costPrice)} TMT</span>
+                        {p.lastCostPrice > 0 && p.lastCostPrice !== p.costPrice && (
+                          <span style={{ fontSize:11, fontWeight:700, padding:'2px 6px', borderRadius:10,
+                            background: p.costPrice > p.lastCostPrice ? '#fdf0ef' : '#eafaf1',
+                            color: p.costPrice > p.lastCostPrice ? '#e74c3c' : '#27ae60' }}>
+                            {p.costPrice > p.lastCostPrice ? `↑ было ${fmt(p.lastCostPrice)}` : `↓ было ${fmt(p.lastCostPrice)}`}
+                          </span>
+                        )}
+                      </span>
+                    ) : '—'}
+                  </td>
                   <td style={{ padding:'12px 16px' }}>
                     {low
                       ? <span style={{ background:'#fdf0ef', color:'#e74c3c', padding:'3px 10px', borderRadius:20, fontSize:12, fontWeight:600 }}>Мало</span>
@@ -287,11 +300,23 @@ function Arrivals() {
                 <span style={{ fontWeight:700, color:'#27ae60', fontSize:16 }}>{fmt(a.totalAmount)} TMT</span>
               </div>
               <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-                {(a.items||[]).map((item,i) => (
-                  <span key={i} style={{ background:'#f0f2f5', padding:'4px 10px', borderRadius:20, fontSize:12 }}>
-                    {item.product?.name||item.productId} — {item.quantity} {item.product?.unit||''} × {item.price} TMT
-                  </span>
-                ))}
+                {(a.items||[]).map((item,i) => {
+                  const prod = item.product
+                  const prevPrice = prod?.lastCostPrice || 0
+                  const curPrice = item.price || 0
+                  const priceUp = prevPrice > 0 && curPrice > prevPrice
+                  const priceDown = prevPrice > 0 && curPrice < prevPrice
+                  return (
+                    <span key={i} style={{ background: priceUp?'#fdf0ef':priceDown?'#eafaf1':'#f0f2f5', padding:'4px 12px', borderRadius:20, fontSize:12, display:'flex', alignItems:'center', gap:6, border: priceUp?'1px solid #fbd5d5':priceDown?'1px solid #a9dfbf':'none' }}>
+                      <span>{item.product?.name||'—'} — {item.quantity} {item.product?.unit||''}</span>
+                      <span style={{ fontWeight:700, color: priceUp?'#e74c3c':priceDown?'#27ae60':'#555' }}>
+                        {curPrice > 0 ? `${curPrice} TMT` : ''}
+                        {priceUp && <span style={{ marginLeft:4 }}>↑ (было {prevPrice})</span>}
+                        {priceDown && <span style={{ marginLeft:4 }}>↓ (было {prevPrice})</span>}
+                      </span>
+                    </span>
+                  )
+                })}
               </div>
               {a.notes && <div style={{ fontSize:12, color:'#888', marginTop:8 }}>{a.notes}</div>}
             </div>

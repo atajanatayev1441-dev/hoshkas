@@ -1138,13 +1138,37 @@ app.post('/api/stock/arrivals', async (req, res) => {
       },
       include: { items: true }
     })
-    // Update stock
+    // Update stock and track price changes
+    const priceChanges = []
     for (const item of items) {
-      await prisma.stockProduct.update({
-        where: { id: item.productId },
-        data: { currentStock: { increment: item.quantity }, costPrice: item.price > 0 ? item.price : undefined }
-      })
+      if (item.price > 0) {
+        const product = await prisma.stockProduct.findUnique({ where: { id: item.productId } })
+        const oldPrice = product?.costPrice || 0
+        const newPrice = item.price
+        let priceStatus = 'same'
+        if (oldPrice > 0 && newPrice !== oldPrice) {
+          priceStatus = newPrice < oldPrice ? 'down' : 'up'
+        }
+        await prisma.stockProduct.update({
+          where: { id: item.productId },
+          data: {
+            currentStock: { increment: item.quantity },
+            lastCostPrice: oldPrice > 0 ? oldPrice : newPrice,
+            costPrice: newPrice,
+            priceUpdatedAt: new Date()
+          }
+        })
+        if (priceStatus !== 'same') {
+          priceChanges.push({ name: product?.name, oldPrice, newPrice, status: priceStatus })
+        }
+      } else {
+        await prisma.stockProduct.update({
+          where: { id: item.productId },
+          data: { currentStock: { increment: item.quantity } }
+        })
+      }
     }
+    arrival.priceChanges = priceChanges
     res.json(arrival)
   } catch(e) { res.status(500).json({ error: e.message }) }
 })
