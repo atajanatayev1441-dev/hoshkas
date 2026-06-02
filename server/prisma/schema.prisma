@@ -292,12 +292,3 @@ model SalesDynamics {
   total     Int      @default(0)
   createdAt DateTime @default(now())
 }
-
-model ItemCost {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  cost      Float    @default(0)
-  price     Float    @default(0)
-  koef      Float    @default(0)
-  createdAt DateTime @default(now())
-}
