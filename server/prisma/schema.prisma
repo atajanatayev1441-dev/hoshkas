@@ -257,3 +257,47 @@ enum DebtStatus {
   UNPAID
   PAID
 }
+model HistoricalOrder {
+  id          Int      @id @default(autoincrement())
+  number      String
+  date        DateTime
+  payType     String?
+  cashier     String?
+  waiter      String?
+  hall        String?
+  tableNumber String?
+  total       Float
+  source      String   @default("ATLANT")
+  createdAt   DateTime @default(now())
+}
+
+model SalesDynamics {
+  id        Int      @id @default(autoincrement())
+  dept      String
+  group     String?
+  itemName  String
+  year      Int      @default(2026)
+  jan       Int      @default(0)
+  feb       Int      @default(0)
+  mar       Int      @default(0)
+  apr       Int      @default(0)
+  may       Int      @default(0)
+  jun       Int      @default(0)
+  jul       Int      @default(0)
+  aug       Int      @default(0)
+  sep       Int      @default(0)
+  oct       Int      @default(0)
+  nov       Int      @default(0)
+  dec       Int      @default(0)
+  total     Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model ItemCost {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  cost      Float    @default(0)
+  price     Float    @default(0)
+  koef      Float    @default(0)
+  createdAt DateTime @default(now())
+}

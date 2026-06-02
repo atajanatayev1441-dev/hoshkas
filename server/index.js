@@ -887,3 +887,156 @@ const PORT = process.env.PORT || 3001
 connectWithRetry()
   .then(() => httpServer.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`)))
   .catch(err => { console.error('❌ DB failed:', err.message); process.exit(1) })
+
+// ─── ИСТОРИЧЕСКИЕ ДАННЫЕ ATLANT ───────────────────────────────
+
+// Импорт исторических чеков
+app.post('/api/historical/import', async (req, res) => {
+  try {
+    const { orders } = req.body
+    let created = 0
+    for (const o of orders) {
+      await prisma.historicalOrder.create({
+        data: {
+          number: String(o.num),
+          date: new Date(o.date.split('.').reverse().join('-')),
+          payType: o.payType,
+          cashier: o.cashier,
+          waiter: o.waiter,
+          hall: o.hall,
+          tableNumber: o.table,
+          total: parseFloat(o.total)
+        }
+      })
+      created++
+    }
+    res.json({ ok: true, created })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// Импорт динамики продаж
+app.post('/api/dynamics/import', async (req, res) => {
+  try {
+    const { items } = req.body
+    let created = 0
+    for (const item of items) {
+      await prisma.salesDynamics.create({
+        data: {
+          dept: item.dept,
+          group: item.group,
+          itemName: item.name,
+          year: 2026,
+          jan: item.months['Январь'] || 0,
+          feb: item.months['Февраль'] || 0,
+          mar: item.months['Март'] || 0,
+          apr: item.months['Апрель'] || 0,
+          may: item.months['Май'] || 0,
+          jun: item.months['Июнь'] || 0,
+          jul: item.months['Июль'] || 0,
+          aug: item.months['Август'] || 0,
+          sep: item.months['Сентябрь'] || 0,
+          oct: item.months['Октябрь'] || 0,
+          nov: item.months['Ноябрь'] || 0,
+          dec: item.months['Декабрь'] || 0,
+          total: item.total
+        }
+      })
+      created++
+    }
+    res.json({ ok: true, created })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// Импорт себестоимости
+app.post('/api/costs/import', async (req, res) => {
+  try {
+    const { costs } = req.body
+    let created = 0, updated = 0
+    for (const [name, data] of Object.entries(costs)) {
+      const existing = await prisma.itemCost.findUnique({ where: { name } })
+      if (existing) {
+        await prisma.itemCost.update({ where: { name }, data: { cost: data.cost, price: data.price, koef: data.koef } })
+        updated++
+      } else {
+        await prisma.itemCost.create({ data: { name, cost: data.cost, price: data.price, koef: data.koef } })
+        created++
+      }
+    }
+    res.json({ ok: true, created, updated })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// Получить динамику продаж
+app.get('/api/dynamics', async (req, res) => {
+  try {
+    const { dept, year } = req.query
+    const where = {}
+    if (dept) where.dept = dept
+    if (year) where.year = Number(year)
+    res.json(await prisma.salesDynamics.findMany({ where, orderBy: { total: 'desc' } }))
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// Получить исторические чеки
+app.get('/api/historical/orders', async (req, res) => {
+  try {
+    const { from, to, waiter, payType } = req.query
+    const where = {}
+    if (from || to) {
+      where.date = {}
+      if (from) where.date.gte = new Date(from)
+      if (to) where.date.lte = new Date(to + 'T23:59:59')
+    }
+    if (waiter) where.waiter = { contains: waiter, mode: 'insensitive' }
+    if (payType) where.payType = payType
+    const orders = await prisma.historicalOrder.findMany({ where, orderBy: { date: 'desc' }, take: 500 })
+    const total = await prisma.historicalOrder.aggregate({ where, _sum: { total: true }, _count: true })
+    res.json({ orders, totalRevenue: total._sum.total || 0, count: total._count })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// Получить себестоимость
+app.get('/api/costs', async (req, res) => {
+  try {
+    res.json(await prisma.itemCost.findMany({ orderBy: { name: 'asc' } }))
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// Сводка по историческим данным
+app.get('/api/historical/summary', async (req, res) => {
+  try {
+    const { from, to } = req.query
+    const where = {}
+    if (from || to) {
+      where.date = {}
+      if (from) where.date.gte = new Date(from)
+      if (to) where.date.lte = new Date(to + 'T23:59:59')
+    }
+    const [agg, byCash, byCard, byWaiter, byDay] = await Promise.all([
+      prisma.historicalOrder.aggregate({ where, _sum: { total: true }, _count: true, _avg: { total: true } }),
+      prisma.historicalOrder.aggregate({ where: { ...where, payType: 'CASH' }, _sum: { total: true } }),
+      prisma.historicalOrder.aggregate({ where: { ...where, payType: 'CARD' }, _sum: { total: true } }),
+      prisma.historicalOrder.groupBy({ by: ['waiter'], where, _sum: { total: true }, _count: true, orderBy: { _sum: { total: 'desc' } } }),
+      prisma.historicalOrder.findMany({ where, select: { date: true, total: true }, orderBy: { date: 'asc' } })
+    ])
+
+    // Group by day
+    const dayMap = {}
+    for (const o of byDay) {
+      const day = o.date.toISOString().slice(0, 10)
+      if (!dayMap[day]) dayMap[day] = { date: day, revenue: 0, orders: 0 }
+      dayMap[day].revenue += o.total
+      dayMap[day].orders++
+    }
+
+    res.json({
+      totalRevenue: agg._sum.total || 0,
+      totalOrders: agg._count,
+      avgCheck: agg._avg.total || 0,
+      byCash: byCash._sum.total || 0,
+      byCard: byCard._sum.total || 0,
+      byWaiter: byWaiter.map(w => ({ waiter: w.waiter, revenue: w._sum.total, orders: w._count })),
+      byDay: Object.values(dayMap).sort((a, b) => a.date.localeCompare(b.date))
+    })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
