@@ -454,10 +454,229 @@ app.get('/api/accounting/full-summary', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
-const waiterPath = join(__dirname, '..', 'public-waiter')
-app.use('/waiter', express.static(waiterPath))
-app.get('/waiter/*', (req, res) => res.sendFile(join(waiterPath, 'index.html')))
-app.get('*', (req, res) => res.sendFile(join(publicPath, 'index.html')))
+// ─── ДЕТАЛЬНЫЙ ОТЧЁТ ──────────────────────────────────────────
+app.get('/api/accounting/orders', async (req, res) => {
+  try {
+    const { from, to, status, waiterId } = req.query
+    const where = {}
+    if (from || to) {
+      where.createdAt = {}
+      if (from) where.createdAt.gte = new Date(from + 'T00:00:00')
+      if (to)   where.createdAt.lte = new Date(to + 'T23:59:59')
+    }
+    if (status) where.status = status
+    if (waiterId) where.waiterId = Number(waiterId)
+    const orders = await prisma.order.findMany({
+      where, orderBy: { createdAt: 'desc' }, take: 500,
+      include: { items: true, waiter: true }
+    })
+    res.json(orders)
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── ПРОДАЖИ ПО ПОДРАЗДЕЛЕНИЯМ ────────────────────────────────
+app.get('/api/accounting/by-department', async (req, res) => {
+  try {
+    const { from, to } = req.query
+    const where = { status: 'PAID' }
+    if (from || to) {
+      where.closedAt = {}
+      if (from) where.closedAt.gte = new Date(from + 'T00:00:00')
+      if (to)   where.closedAt.lte = new Date(to + 'T23:59:59')
+    }
+    const orders = await prisma.order.findMany({ where, include: { items: { include: { item: true } } } })
+    const deps = { BAR: 0, KITCHEN: 0, GRILL: 0, OTHER: 0 }
+    for (const o of orders) {
+      for (const oi of o.items) {
+        const dep = oi.item?.department || 'KITCHEN'
+        deps[dep] = (deps[dep] || 0) + oi.price * oi.quantity
+      }
+    }
+    res.json(deps)
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── ОТЧЁТ ПО ПЕРСОНАЛУ ───────────────────────────────────────
+app.get('/api/accounting/staff-report', async (req, res) => {
+  try {
+    const { from, to } = req.query
+    const where = { status: 'PAID' }
+    if (from || to) {
+      where.closedAt = {}
+      if (from) where.closedAt.gte = new Date(from + 'T00:00:00')
+      if (to)   where.closedAt.lte = new Date(to + 'T23:59:59')
+    }
+    const orders = await prisma.order.findMany({ where })
+    const map = {}
+    for (const o of orders) {
+      const name = o.waiterName || 'Неизвестно'
+      if (!map[name]) map[name] = { name, orders: 0, revenue: 0 }
+      map[name].orders++
+      map[name].revenue += o.total
+    }
+    const result = Object.values(map).map(w => ({ ...w, avgCheck: w.orders ? Math.round(w.revenue / w.orders) : 0 }))
+      .sort((a,b) => b.revenue - a.revenue)
+    res.json(result)
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── ДИНАМИКА ПО МЕСЯЦАМ ──────────────────────────────────────
+app.get('/api/accounting/monthly', async (req, res) => {
+  try {
+    const { year } = req.query
+    const y = Number(year) || new Date().getFullYear()
+    const orders = await prisma.order.findMany({
+      where: { status: 'PAID', closedAt: { gte: new Date(`${y}-01-01`), lte: new Date(`${y}-12-31T23:59:59`) } }
+    })
+    const months = Array.from({length:12}, (_,i) => ({ month: i+1, orders: 0, revenue: 0, avgCheck: 0 }))
+    for (const o of orders) {
+      const m = new Date(o.closedAt).getMonth()
+      months[m].orders++
+      months[m].revenue += o.total
+    }
+    months.forEach(m => { m.avgCheck = m.orders ? Math.round(m.revenue / m.orders) : 0 })
+    res.json(months)
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── КОНТРОЛЬ ЦЕН ─────────────────────────────────────────────
+app.get('/api/accounting/price-control', async (req, res) => {
+  try {
+    const items = await prisma.item.findMany({
+      where: { active: true },
+      include: { category: true, cost: true },
+      orderBy: { categoryId: 'asc' }
+    })
+    res.json(items.map(i => ({
+      id: i.id, name: i.name, price: i.price, department: i.department,
+      category: i.category.name,
+      costPrice: i.cost?.costPrice || 0,
+      markup: i.cost?.costPrice ? Math.round((i.price - i.cost.costPrice) / i.cost.costPrice * 100) : null,
+      profit: i.cost?.costPrice ? i.price - i.cost.costPrice : null
+    })))
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+app.put('/api/accounting/price-control/:id', async (req, res) => {
+  try {
+    const { costPrice, department } = req.body
+    const id = Number(req.params.id)
+    if (costPrice !== undefined) {
+      await prisma.itemCost.upsert({
+        where: { itemId: id },
+        create: { itemId: id, costPrice: parseFloat(costPrice) },
+        update: { costPrice: parseFloat(costPrice) }
+      })
+    }
+    if (department !== undefined) {
+      await prisma.item.update({ where: { id }, data: { department } })
+    }
+    res.json({ ok: true })
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── СКЛАД: ПОСТАВЩИКИ ────────────────────────────────────────
+app.get('/api/stock/suppliers', async (req, res) => {
+  try { res.json(await prisma.supplier.findMany({ where: { active: true }, orderBy: { name: 'asc' } })) }
+  catch(e) { res.status(500).json({ error: e.message }) }
+})
+app.post('/api/stock/suppliers', async (req, res) => {
+  try { res.json(await prisma.supplier.create({ data: { name: req.body.name, phone: req.body.phone } })) }
+  catch(e) { res.status(500).json({ error: e.message }) }
+})
+app.delete('/api/stock/suppliers/:id', async (req, res) => {
+  try { await prisma.supplier.update({ where: { id: Number(req.params.id) }, data: { active: false } }); res.json({ ok: true }) }
+  catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── СКЛАД: ТОВАРЫ ────────────────────────────────────────────
+app.get('/api/stock/products', async (req, res) => {
+  try { res.json(await prisma.stockProduct.findMany({ where: { active: true }, orderBy: { name: 'asc' } })) }
+  catch(e) { res.status(500).json({ error: e.message }) }
+})
+app.post('/api/stock/products', async (req, res) => {
+  try {
+    const { name, unit, costPrice, minStock, department } = req.body
+    res.json(await prisma.stockProduct.create({ data: { name, unit: unit||'шт', costPrice: parseFloat(costPrice||0), minStock: parseFloat(minStock||0), department: department||'KITCHEN' } }))
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+app.put('/api/stock/products/:id', async (req, res) => {
+  try {
+    const { name, unit, costPrice, minStock, department } = req.body
+    res.json(await prisma.stockProduct.update({ where: { id: Number(req.params.id) }, data: { name, unit, costPrice: parseFloat(costPrice||0), minStock: parseFloat(minStock||0), department } }))
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+app.delete('/api/stock/products/:id', async (req, res) => {
+  try { await prisma.stockProduct.update({ where: { id: Number(req.params.id) }, data: { active: false } }); res.json({ ok: true }) }
+  catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── СКЛАД: ПОСТУПЛЕНИЯ ───────────────────────────────────────
+app.get('/api/stock/arrivals', async (req, res) => {
+  try {
+    const { from, to } = req.query
+    const where = {}
+    if (from || to) { where.date = {}; if (from) where.date.gte = new Date(from + 'T00:00:00'); if (to) where.date.lte = new Date(to + 'T23:59:59') }
+    res.json(await prisma.stockArrival.findMany({ where, orderBy: { date: 'desc' }, include: { supplier: true, items: { include: { product: true } } } }))
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+app.post('/api/stock/arrivals', async (req, res) => {
+  try {
+    const { supplierId, invoiceNum, notes, createdBy, date, items } = req.body
+    const totalAmount = items.reduce((s, i) => s + parseFloat(i.total||0), 0)
+    const arrival = await prisma.stockArrival.create({
+      data: {
+        supplierId: supplierId ? Number(supplierId) : null,
+        invoiceNum, notes, createdBy, totalAmount,
+        date: date ? new Date(date) : new Date(),
+        items: { create: items.map(i => ({ productId: Number(i.productId), quantity: parseFloat(i.quantity), price: parseFloat(i.price), total: parseFloat(i.total) })) }
+      },
+      include: { items: true }
+    })
+    for (const i of items) {
+      await prisma.stockProduct.update({ where: { id: Number(i.productId) }, data: { currentStock: { increment: parseFloat(i.quantity) }, costPrice: parseFloat(i.price) } })
+    }
+    res.json(arrival)
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── СКЛАД: СПИСАНИЯ ──────────────────────────────────────────
+app.get('/api/stock/writeoffs', async (req, res) => {
+  try { res.json(await prisma.stockWriteoff.findMany({ orderBy: { date: 'desc' }, include: { items: { include: { product: true } } } })) }
+  catch(e) { res.status(500).json({ error: e.message }) }
+})
+app.post('/api/stock/writeoffs', async (req, res) => {
+  try {
+    const { reason, notes, createdBy, items } = req.body
+    const writeoff = await prisma.stockWriteoff.create({
+      data: { reason, notes, createdBy, items: { create: items.map(i => ({ productId: Number(i.productId), quantity: parseFloat(i.quantity), reason: i.reason })) } },
+      include: { items: true }
+    })
+    for (const i of items) {
+      await prisma.stockProduct.update({ where: { id: Number(i.productId) }, data: { currentStock: { decrement: parseFloat(i.quantity) } } })
+    }
+    res.json(writeoff)
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── ИНВЕНТАРИЗАЦИЯ ───────────────────────────────────────────
+app.get('/api/stock/inventories', async (req, res) => {
+  try { res.json(await prisma.inventory.findMany({ orderBy: { date: 'desc' }, include: { items: { include: { product: true } } } })) }
+  catch(e) { res.status(500).json({ error: e.message }) }
+})
+app.post('/api/stock/inventories', async (req, res) => {
+  try {
+    const { notes, createdBy, items } = req.body
+    const inv = await prisma.inventory.create({
+      data: { notes, createdBy, items: { create: items.map(i => ({ productId: Number(i.productId), expected: parseFloat(i.expected), actual: parseFloat(i.actual), diff: parseFloat(i.actual) - parseFloat(i.expected) })) } },
+      include: { items: { include: { product: true } } }
+    })
+    for (const i of items) {
+      await prisma.stockProduct.update({ where: { id: Number(i.productId) }, data: { currentStock: parseFloat(i.actual) } })
+    }
+    res.json(inv)
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
 
 const PORT = process.env.PORT || 3001
 

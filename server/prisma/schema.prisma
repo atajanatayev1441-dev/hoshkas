@@ -22,6 +22,8 @@ model Item {
   category   Category    @relation(fields: [categoryId], references: [id])
   orderItems OrderItem[]
   active     Boolean     @default(true)
+  department String      @default("KITCHEN")
+  cost       ItemCost?
   createdAt  DateTime    @default(now())
 }
 
@@ -100,6 +102,106 @@ model AccountingUser {
   username  String   @unique
   password  String
   createdAt DateTime @default(now())
+}
+
+// ─── СКЛАД ────────────────────────────────────────────────────
+
+model Supplier {
+  id        Int       @id @default(autoincrement())
+  name      String
+  phone     String?
+  active    Boolean   @default(true)
+  arrivals  StockArrival[]
+  createdAt DateTime  @default(now())
+}
+
+model StockProduct {
+  id            Int              @id @default(autoincrement())
+  name          String
+  unit          String           @default("шт")
+  costPrice     Float            @default(0)
+  currentStock  Float            @default(0)
+  minStock      Float            @default(0)
+  department    String           @default("KITCHEN")
+  active        Boolean          @default(true)
+  arrivalItems  StockArrivalItem[]
+  writeoffItems StockWriteoffItem[]
+  inventoryItems InventoryItem[]
+  createdAt     DateTime         @default(now())
+}
+
+model StockArrival {
+  id          Int                @id @default(autoincrement())
+  date        DateTime           @default(now())
+  supplierId  Int?
+  supplier    Supplier?          @relation(fields: [supplierId], references: [id])
+  invoiceNum  String?
+  totalAmount Float              @default(0)
+  notes       String?
+  createdBy   String?
+  items       StockArrivalItem[]
+  createdAt   DateTime           @default(now())
+}
+
+model StockArrivalItem {
+  id         Int          @id @default(autoincrement())
+  arrivalId  Int
+  arrival    StockArrival @relation(fields: [arrivalId], references: [id], onDelete: Cascade)
+  productId  Int
+  product    StockProduct @relation(fields: [productId], references: [id])
+  quantity   Float
+  price      Float
+  total      Float
+}
+
+model StockWriteoff {
+  id        Int                @id @default(autoincrement())
+  date      DateTime           @default(now())
+  reason    String?
+  notes     String?
+  createdBy String?
+  items     StockWriteoffItem[]
+  createdAt DateTime           @default(now())
+}
+
+model StockWriteoffItem {
+  id          Int           @id @default(autoincrement())
+  writeoffId  Int
+  writeoff    StockWriteoff @relation(fields: [writeoffId], references: [id], onDelete: Cascade)
+  productId   Int
+  product     StockProduct  @relation(fields: [productId], references: [id])
+  quantity    Float
+  reason      String?
+}
+
+model Inventory {
+  id        Int             @id @default(autoincrement())
+  date      DateTime        @default(now())
+  notes     String?
+  createdBy String?
+  items     InventoryItem[]
+  createdAt DateTime        @default(now())
+}
+
+model InventoryItem {
+  id          Int          @id @default(autoincrement())
+  inventoryId Int
+  inventory   Inventory    @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  productId   Int
+  product     StockProduct @relation(fields: [productId], references: [id])
+  expected    Float
+  actual      Float
+  diff        Float
+}
+
+// ─── КОНТРОЛЬ ЦЕН ─────────────────────────────────────────────
+
+model ItemCost {
+  id        Int      @id @default(autoincrement())
+  itemId    Int      @unique
+  item      Item     @relation(fields: [itemId], references: [id])
+  costPrice Float    @default(0)
+  updatedAt DateTime @updatedAt
 }
 
 enum OrderStatus {
