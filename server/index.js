@@ -1410,6 +1410,57 @@ app.get('/api/recipes/consumption', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }) }
 })
 
+
+// ─── ПЕРЕМЕЩЕНИЕ ТОВАРОВ ──────────────────────────────────────
+app.get('/api/stock/transfers', async (req, res) => {
+  try {
+    res.json(await prisma.stockTransfer.findMany({
+      include: {
+        fromWarehouse: true, toWarehouse: true,
+        items: { include: { product: true } }
+      },
+      orderBy: { date: 'desc' }, take: 50
+    }))
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/api/stock/transfers', async (req, res) => {
+  try {
+    const { fromWarehouseId, toWarehouseId, notes, createdBy, items } = req.body
+    if (fromWarehouseId === toWarehouseId) return res.status(400).json({ error: 'Склады должны быть разными' })
+
+    const transfer = await prisma.stockTransfer.create({
+      data: {
+        fromWarehouseId: Number(fromWarehouseId),
+        toWarehouseId: Number(toWarehouseId),
+        notes, createdBy,
+        items: { create: items.map(i => ({ productId: Number(i.productId), quantity: parseFloat(i.quantity) })) }
+      },
+      include: { items: true }
+    })
+
+    // Update stock
+    for (const item of items) {
+      await prisma.stockProduct.update({
+        where: { id: Number(item.productId) },
+        data: { currentStock: { decrement: parseFloat(item.quantity) } }
+      })
+    }
+
+    res.json(transfer)
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/api/warehouses', async (req, res) => {
+  try { res.json(await prisma.warehouse.findMany({ orderBy: { name: 'asc' } })) }
+  catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/api/warehouses', async (req, res) => {
+  try { res.json(await prisma.warehouse.create({ data: { name: req.body.name } })) }
+  catch(e) { res.status(500).json({ error: e.message }) }
+})
+
 // ─── RESET DATABASE ───────────────────────────────────────────
 app.post('/api/admin/reset', async (req, res) => {
   try {

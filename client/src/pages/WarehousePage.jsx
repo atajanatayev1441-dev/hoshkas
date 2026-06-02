@@ -15,6 +15,7 @@ const Icon = {
   Edit: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
   Trash: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>,
   Refresh: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>,
+  Transfer: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>,
 }
 
 const TAB_STYLE = (active) => ({
@@ -40,6 +41,7 @@ export default function WarehousePage() {
     { key: 'arrivals', label: 'Поступления', icon: <Icon.Arrival /> },
     { key: 'writeoffs', label: 'Списания', icon: <Icon.Writeoff /> },
     { key: 'inventory', label: 'Инвентаризация', icon: <Icon.Inventory /> },
+    { key: 'transfers', label: 'Перемещение', icon: <Icon.Transfer /> },
   ]
 
   return (
@@ -56,6 +58,7 @@ export default function WarehousePage() {
         {tab === 'arrivals'   && <Arrivals />}
         {tab === 'writeoffs'  && <Writeoffs />}
         {tab === 'inventory'  && <InventoryTab />}
+        {tab === 'transfers'  && <Transfers />}
       </div>
     </div>
   )
@@ -508,3 +511,121 @@ function InventoryTab() {
     </div>
   )
 }
+
+// ─── ПЕРЕМЕЩЕНИЕ ТОВАРОВ ──────────────────────────────────────
+function Transfers() {
+  const [transfers, setTransfers] = useState([])
+  const [warehouses, setWarehouses] = useState([])
+  const [products, setProducts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({ fromWarehouseId:'', toWarehouseId:'', notes:'', createdBy:'' })
+  const [items, setItems] = useState([{ productId:'', quantity:'' }])
+
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    setLoading(true)
+    const [t, w, p] = await Promise.all([
+      fetch(`${API}/stock/transfers`).then(r=>r.json()).catch(()=>[]),
+      fetch(`${API}/warehouses`).then(r=>r.json()).catch(()=>[]),
+      fetch(`${API}/stock/products`).then(r=>r.json()).catch(()=>[]),
+    ])
+    setTransfers(Array.isArray(t)?t:[])
+    setWarehouses(Array.isArray(w)?w:[])
+    setProducts(Array.isArray(p)?p:[])
+    if (w.length>=2) setForm(f=>({...f, fromWarehouseId:w[0].id, toWarehouseId:w[1].id}))
+    setLoading(false)
+  }
+
+  async function save() {
+    const valid = items.filter(i=>i.productId&&i.quantity)
+    if (!valid.length||!form.fromWarehouseId||!form.toWarehouseId) return
+    await fetch(`${API}/stock/transfers`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ ...form, fromWarehouseId:Number(form.fromWarehouseId), toWarehouseId:Number(form.toWarehouseId), items:valid.map(i=>({productId:Number(i.productId),quantity:parseFloat(i.quantity)})) })
+    })
+    setShowForm(false)
+    setItems([{ productId:'', quantity:'' }])
+    load()
+  }
+
+  return (
+    <div style={{ padding:24, maxWidth:900, margin:'0 auto' }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+        <div style={{ fontSize:20, fontWeight:700, color:'#1a1a2e', display:'flex', alignItems:'center', gap:10 }}><Icon.Transfer /> Перемещение товаров</div>
+        <button style={BTN('#2980b9')} onClick={()=>setShowForm(!showForm)}><Icon.Plus /> Новое перемещение</button>
+      </div>
+
+      {showForm && (
+        <div style={CARD}>
+          <div style={{ fontWeight:600, marginBottom:14, fontSize:14 }}>Перемещение между складами</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginBottom:14 }}>
+            <div>
+              <div style={{ fontSize:12, color:'#888', marginBottom:4 }}>Откуда</div>
+              <select style={INPUT} value={form.fromWarehouseId} onChange={e=>setForm({...form,fromWarehouseId:e.target.value})}>
+                <option value="">Выберите склад</option>
+                {warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize:12, color:'#888', marginBottom:4 }}>Куда</div>
+              <select style={INPUT} value={form.toWarehouseId} onChange={e=>setForm({...form,toWarehouseId:e.target.value})}>
+                <option value="">Выберите склад</option>
+                {warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize:12, color:'#888', marginBottom:4 }}>Кто перемещает</div>
+              <input style={INPUT} value={form.createdBy} onChange={e=>setForm({...form,createdBy:e.target.value})} placeholder="Имя" />
+            </div>
+          </div>
+
+          {items.map((item,i)=>(
+            <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 120px 36px', gap:8, marginBottom:8 }}>
+              <select style={INPUT} value={item.productId} onChange={e=>setItems(items.map((it,idx)=>idx===i?{...it,productId:e.target.value}:it))}>
+                <option value="">Выберите товар</option>
+                {products.map(p=><option key={p.id} value={p.id}>{p.name} ({p.unit}) — остаток: {p.currentStock}</option>)}
+              </select>
+              <input style={INPUT} type="number" placeholder="Кол-во" value={item.quantity} onChange={e=>setItems(items.map((it,idx)=>idx===i?{...it,quantity:e.target.value}:it))} />
+              <button style={{ background:'none', border:'1.5px solid #fbd5d5', borderRadius:8, cursor:'pointer', color:'#e74c3c', display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=>setItems(items.filter((_,idx)=>idx!==i))}>×</button>
+            </div>
+          ))}
+          <button style={{ ...BTN('#888'), marginBottom:14, fontSize:12 }} onClick={()=>setItems([...items,{productId:'',quantity:''}])}><Icon.Plus /> Добавить строку</button>
+          <textarea style={{ ...INPUT, resize:'none', marginBottom:12 }} rows={2} placeholder="Примечание" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} />
+          <div style={{ display:'flex', gap:10 }}>
+            <button style={BTN('#2980b9')} onClick={save}>Сохранить</button>
+            <button style={BTN('#888')} onClick={()=>setShowForm(false)}>Отмена</button>
+          </div>
+        </div>
+      )}
+
+      {loading ? <Loader /> : transfers.length===0 ? <Empty text="Перемещений нет" /> : (
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          {transfers.map(t=>(
+            <div key={t.id} style={CARD}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                  <span style={{ fontWeight:700 }}>{fmtDate(t.date)}</span>
+                  <span style={{ background:'#eaf4fb', color:'#2980b9', borderRadius:8, padding:'3px 10px', fontSize:12, fontWeight:600 }}>{t.fromWarehouse?.name}</span>
+                  <span style={{ color:'#aaa' }}>→</span>
+                  <span style={{ background:'#eafaf1', color:'#27ae60', borderRadius:8, padding:'3px 10px', fontSize:12, fontWeight:600 }}>{t.toWarehouse?.name}</span>
+                  {t.createdBy && <span style={{ color:'#aaa', fontSize:12 }}>· {t.createdBy}</span>}
+                </div>
+              </div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                {(t.items||[]).map((item,i)=>(
+                  <span key={i} style={{ background:'#f0f2f5', padding:'4px 10px', borderRadius:20, fontSize:12 }}>
+                    {item.product?.name} — {item.quantity} {item.product?.unit}
+                  </span>
+                ))}
+              </div>
+              {t.notes && <div style={{ fontSize:12, color:'#888', marginTop:8 }}>{t.notes}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+

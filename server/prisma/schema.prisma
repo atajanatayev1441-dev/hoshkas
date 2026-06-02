@@ -153,6 +153,7 @@ model StockProduct {
   active         Boolean            @default(true)
   arrivalItems   StockArrivalItem[]
   recipeItems    RecipeItem[]
+  transferItems  StockTransferItem[]
   writeoffItems  StockWriteoffItem[]
   inventoryItems InventoryItem[]
   createdAt      DateTime           @default(now())
@@ -350,5 +351,27 @@ model RecipeItem {
   grossQty    Float        @default(0)
   costPrice   Float        @default(0)
   totalCost   Float        @default(0)
+}
+// ─── ПЕРЕМЕЩЕНИЕ ТОВАРОВ ──────────────────────────────────────
+model StockTransfer {
+  id            Int                  @id @default(autoincrement())
+  fromWarehouse Warehouse            @relation("TransferFrom", fields: [fromWarehouseId], references: [id])
+  fromWarehouseId Int
+  toWarehouse   Warehouse            @relation("TransferTo", fields: [toWarehouseId], references: [id])
+  toWarehouseId Int
+  date          DateTime             @default(now())
+  notes         String?
+  createdBy     String?
+  items         StockTransferItem[]
+  createdAt     DateTime             @default(now())
+}
+
+model StockTransferItem {
+  id          Int           @id @default(autoincrement())
+  transferId  Int
+  transfer    StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  productId   Int
+  product     StockProduct  @relation(fields: [productId], references: [id])
+  quantity    Float
 }
 
