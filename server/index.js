@@ -719,8 +719,6 @@ app.post('/api/stock/inventories', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }) }
 })
 
-const PORT = process.env.PORT || 3001
-
 // ─── MANAGER ──────────────────────────────────────────────────
 
 // Авторизация управляющего
@@ -877,17 +875,6 @@ app.get('/api/manager/waiter-stats', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
-// ─── STATIC & CATCH-ALL (must be last) ───────────────────────
-const waiterPath = join(__dirname, '..', 'public-waiter')
-app.use('/waiter', express.static(waiterPath))
-app.get('/waiter/*', (req, res) => res.sendFile(join(waiterPath, 'index.html')))
-app.get('*', (req, res) => res.sendFile(join(publicPath, 'index.html')))
-
-const PORT = process.env.PORT || 3001
-connectWithRetry()
-  .then(() => httpServer.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`)))
-  .catch(err => { console.error('❌ DB failed:', err.message); process.exit(1) })
-
 // ─── ИСТОРИЧЕСКИЕ ДАННЫЕ ATLANT ───────────────────────────────
 
 // Импорт исторических чеков
@@ -1040,3 +1027,14 @@ app.get('/api/historical/summary', async (req, res) => {
     })
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
+
+// ─── STATIC & CATCH-ALL (must be last) ───────────────────────
+const waiterPath = join(__dirname, '..', 'public-waiter')
+app.use('/waiter', express.static(waiterPath))
+app.get('/waiter/*', (req, res) => res.sendFile(join(waiterPath, 'index.html')))
+app.get('*', (req, res) => res.sendFile(join(publicPath, 'index.html')))
+
+const PORT = process.env.PORT || 3001
+connectWithRetry()
+  .then(() => httpServer.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`)))
+  .catch(err => { console.error('❌ DB failed:', err.message); process.exit(1) })
