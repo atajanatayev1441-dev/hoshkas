@@ -1,0 +1,10 @@
+node_modules/
+client/node_modules/
+server/node_modules/
+waiter-app/node_modules/
+desktop/node_modules/
+public/
+client/dist/
+*.env
+.env
+.env.local
