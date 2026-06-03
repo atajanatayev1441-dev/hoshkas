@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 const API = '/api'
 const MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь']
@@ -61,6 +62,7 @@ function LoginScreen({ onLogin }) {
 export default function AccountingApp() {
   const [user, setUser] = useState(() => sessionStorage.getItem('acc_user'))
   const [tab, setTab] = useState('dashboard')
+  const navigate = useNavigate()
 
   function logout() { sessionStorage.removeItem('acc_user'); setUser(null) }
   function handleLogin(u) { sessionStorage.setItem('acc_user',u); setUser(u) }
@@ -87,9 +89,15 @@ export default function AccountingApp() {
           <span style={{width:1,height:16,background:'rgba(255,255,255,0.2)',display:'inline-block'}}/>
           <span style={{color:'rgba(255,255,255,0.6)',fontSize:13}}>Бухгалтерия</span>
         </div>
-        <button onClick={logout} style={{background:'rgba(255,255,255,0.1)',border:'none',color:'#fff',padding:'6px 14px',borderRadius:8,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>
-          Выйти ({user})
-        </button>
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={()=>navigate('/')} style={{background:'rgba(201,169,110,0.2)',border:'1px solid rgba(201,169,110,0.4)',color:'#c9a96e',padding:'6px 14px',borderRadius:8,fontSize:13,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            Главное меню
+          </button>
+          <button onClick={logout} style={{background:'rgba(255,255,255,0.1)',border:'none',color:'#fff',padding:'6px 14px',borderRadius:8,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>
+            Выйти ({user})
+          </button>
+        </div>
       </div>
       <div style={{background:'#fff',borderBottom:'1px solid #e8e8e8',padding:'0 24px',display:'flex',overflowX:'auto',flexShrink:0}}>
         {tabs.map(t=>(

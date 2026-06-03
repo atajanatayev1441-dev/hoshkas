@@ -31,6 +31,8 @@ export default function CashierPage() {
   const [recentOrders, setRecentOrders] = useState([])
   const [acceptingId, setAcceptingId] = useState(null)
   const [acceptPayment, setAcceptPayment] = useState({})
+  const [analytics, setAnalytics] = useState(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(false)
 
   const wsRef = useRef(null)
 
@@ -49,6 +51,52 @@ export default function CashierPage() {
       const data = await fetch(`${API}/orders/recent?limit=50`).then(r => r.json())
       setRecentOrders(Array.isArray(data) ? data : [])
     } catch {}
+  }
+
+  async function loadAnalytics() {
+    setAnalyticsLoading(true)
+    try {
+      const today = new Date().toISOString().slice(0, 10)
+      const [summary, expenses, recentOrd] = await Promise.all([
+        fetch(`${API}/accounting/summary?from=${today}&to=${today}`).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch(`${API}/accounting/expenses?from=${today}&to=${today}`).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch(`${API}/orders/recent?limit=200`).then(r => r.json()).catch(() => []),
+      ])
+      // Считаем из чеков если бухгалтерия недоступна
+      const todayOrders = (Array.isArray(recentOrd) ? recentOrd : []).filter(o => {
+        const d = new Date(o.createdAt).toISOString().slice(0, 10)
+        return d === today && o.status === 'PAID'
+      })
+      const cashTotal = todayOrders.filter(o => o.paymentType === 'CASH').reduce((s, o) => s + (o.total || 0), 0)
+      const cardTotal = todayOrders.filter(o => o.paymentType === 'CARD').reduce((s, o) => s + (o.total || 0), 0)
+      const totalRevenue = cashTotal + cardTotal
+      // Топ блюд
+      const itemMap = {}
+      todayOrders.forEach(o => (o.items || []).forEach(i => {
+        if (!itemMap[i.name]) itemMap[i.name] = { name: i.name, qty: 0, total: 0 }
+        itemMap[i.name].qty += i.quantity || 1
+        itemMap[i.name].total += (i.price || 0) * (i.quantity || 1)
+      }))
+      const topItems = Object.values(itemMap).sort((a, b) => b.qty - a.qty).slice(0, 8)
+      // По часам
+      const hourMap = {}
+      todayOrders.forEach(o => {
+        const h = new Date(o.createdAt).getHours()
+        if (!hourMap[h]) hourMap[h] = 0
+        hourMap[h] += o.total || 0
+      })
+      const totalExpenses = expenses ? (Array.isArray(expenses) ? expenses.reduce((s, e) => s + (e.amount || 0), 0) : (expenses.total || 0)) : 0
+      setAnalytics({
+        totalRevenue, cashTotal, cardTotal,
+        orderCount: todayOrders.length,
+        avgCheck: todayOrders.length ? totalRevenue / todayOrders.length : 0,
+        topItems, hourMap,
+        totalExpenses,
+        profit: totalRevenue - totalExpenses,
+        summaryFromAccounting: summary,
+      })
+    } catch(e) { console.error(e) }
+    setAnalyticsLoading(false)
   }
 
   function connectWS() {
@@ -297,6 +345,10 @@ export default function CashierPage() {
         <button className={activeTab === 'history' ? 'active' : ''} onClick={() => { setActiveTab('history'); loadRecentOrders() }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           История чеков
+        </button>
+        <button className={activeTab === 'analytics' ? 'active' : ''} onClick={() => { setActiveTab('analytics'); loadAnalytics() }}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Аналитика
         </button>
       </div>
 
@@ -708,7 +760,85 @@ export default function CashierPage() {
         </div>
       )}
 
-      <style>{`
+      {/* АНАЛИТИКА */}
+      {activeTab === 'analytics' && (
+        <div style={{ flex:1, overflow:'auto', padding:20, background:'var(--bg)' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+            <div style={{ fontSize:17, fontWeight:700, color:'var(--brand)' }}>Аналитика за сегодня</div>
+            <button onClick={loadAnalytics} style={{ background:'none', border:'1.5px solid var(--border)', borderRadius:8, padding:'6px 14px', cursor:'pointer', fontSize:13, color:'var(--text-muted)', display:'flex', alignItems:'center', gap:5, fontFamily:'inherit' }}>↻ Обновить</button>
+          </div>
+
+          {analyticsLoading && <div style={{ textAlign:'center', padding:40, color:'var(--text-muted)' }}>Загрузка...</div>}
+
+          {!analyticsLoading && !analytics && (
+            <div style={{ textAlign:'center', padding:40, color:'var(--text-muted)' }}>Нет данных</div>
+          )}
+
+          {!analyticsLoading && analytics && (() => {
+            const fmt = n => Number(n||0).toLocaleString('ru-RU', { maximumFractionDigits:0 })
+            const maxHour = Math.max(...Object.values(analytics.hourMap || {}), 1)
+            return (
+              <>
+                {/* Основные показатели */}
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:12, marginBottom:20 }}>
+                  {[
+                    { label:'Выручка', value:`${fmt(analytics.totalRevenue)} TMT`, color:'#27ae60', bg:'#eafaf1' },
+                    { label:'Наличные', value:`${fmt(analytics.cashTotal)} TMT`, color:'#2980b9', bg:'#eaf4fb' },
+                    { label:'Карта', value:`${fmt(analytics.cardTotal)} TMT`, color:'#8e44ad', bg:'#f5eef8' },
+                    { label:'Чеков', value:analytics.orderCount, color:'#e67e22', bg:'#fef9e7' },
+                    { label:'Средний чек', value:`${fmt(analytics.avgCheck)} TMT`, color:'#c0392b', bg:'#fdedec' },
+                    { label:'Расходы', value:`${fmt(analytics.totalExpenses)} TMT`, color:'#e74c3c', bg:'#fff0f0' },
+                    { label:'Прибыль', value:`${fmt(analytics.profit)} TMT`, color: analytics.profit >= 0 ? '#27ae60' : '#e74c3c', bg: analytics.profit >= 0 ? '#eafaf1' : '#fff0f0' },
+                  ].map(({ label, value, color, bg }) => (
+                    <div key={label} style={{ background:'var(--surface)', borderRadius:14, padding:'16px 18px', border:'1px solid var(--border)', boxShadow:'var(--shadow-sm)' }}>
+                      <div style={{ fontSize:11, color:'var(--text-muted)', fontWeight:600, textTransform:'uppercase', letterSpacing:0.5, marginBottom:6 }}>{label}</div>
+                      <div style={{ fontSize:20, fontWeight:800, color }}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* График по часам */}
+                {Object.keys(analytics.hourMap).length > 0 && (
+                  <div style={{ background:'var(--surface)', borderRadius:14, padding:20, border:'1px solid var(--border)', boxShadow:'var(--shadow-sm)', marginBottom:20 }}>
+                    <div style={{ fontSize:14, fontWeight:700, marginBottom:16, color:'var(--brand)' }}>Выручка по часам</div>
+                    <div style={{ display:'flex', alignItems:'flex-end', gap:6, height:100 }}>
+                      {Array.from({ length:24 }, (_, h) => {
+                        const val = analytics.hourMap[h] || 0
+                        const height = val ? Math.max(8, (val / maxHour) * 90) : 4
+                        return (
+                          <div key={h} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
+                            <div title={`${h}:00 — ${fmt(val)} TMT`} style={{ width:'100%', height, background: val ? 'var(--brand)' : '#eee', borderRadius:'4px 4px 0 0', transition:'height .3s', cursor:'default', opacity: val ? 1 : 0.4 }} />
+                            {h % 3 === 0 && <span style={{ fontSize:9, color:'var(--text-muted)' }}>{h}</span>}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Топ блюд */}
+                {analytics.topItems.length > 0 && (
+                  <div style={{ background:'var(--surface)', borderRadius:14, padding:20, border:'1px solid var(--border)', boxShadow:'var(--shadow-sm)' }}>
+                    <div style={{ fontSize:14, fontWeight:700, marginBottom:14, color:'var(--brand)' }}>Топ блюд за сегодня</div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                      {analytics.topItems.map((item, i) => (
+                        <div key={item.name} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                          <span style={{ width:22, height:22, borderRadius:'50%', background: i < 3 ? 'var(--brand)' : '#eee', color: i < 3 ? '#fff' : '#888', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, flexShrink:0 }}>{i+1}</span>
+                          <span style={{ flex:1, fontSize:13, fontWeight:500, color:'var(--text)' }}>{item.name}</span>
+                          <span style={{ fontSize:13, color:'var(--text-muted)' }}>×{item.qty}</span>
+                          <span style={{ fontSize:13, fontWeight:700, color:'var(--brand)' }}>{fmt(item.total)} TMT</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )
+          })()}
+        </div>
+      )}
+
+
         @keyframes pulse {
           0%, 100% { opacity: 1; transform: scale(1); }
           50% { opacity: 0.5; transform: scale(1.3); }
