@@ -843,12 +843,6 @@ export default function CashierPage() {
       )}
 
 
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.5; transform: scale(1.3); }
-        }
-      `}</style>
     </div>
   )
 }
