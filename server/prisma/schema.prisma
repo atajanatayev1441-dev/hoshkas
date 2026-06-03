@@ -9,12 +9,14 @@ datasource db {
 
 // ─── СПРАВОЧНИК СКЛАДОВ ───────────────────────────────────────
 model Warehouse {
-  id           Int            @id @default(autoincrement())
-  name         String         @unique
-  active       Boolean        @default(true)
-  departments  Department[]
+  id            Int             @id @default(autoincrement())
+  name          String          @unique
+  active        Boolean         @default(true)
+  departments   Department[]
   stockProducts StockProduct[]
-  createdAt    DateTime       @default(now())
+  transfersFrom StockTransfer[] @relation("TransferFrom")
+  transfersTo   StockTransfer[] @relation("TransferTo")
+  createdAt     DateTime        @default(now())
 }
 
 // ─── СПРАВОЧНИК ПОДРАЗДЕЛЕНИЙ ─────────────────────────────────
