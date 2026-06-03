@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 const API = '/api'
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`
@@ -100,9 +101,10 @@ function LoginScreen({ onLogin }) {
 export default function ManagerApp() {
   const [auth, setAuth] = useState(() => sessionStorage.getItem('mgr_auth') === 'true')
   const [tab, setTab] = useState('dashboard')
+  const navigate = useNavigate()
 
   function handleLogin() { sessionStorage.setItem('mgr_auth', 'true'); setAuth(true) }
-  function logout() { sessionStorage.removeItem('mgr_auth'); setAuth(false) }
+  function logout() { sessionStorage.removeItem('mgr_auth'); setAuth(false); navigate('/login') }
 
   if (!auth) return <LoginScreen onLogin={handleLogin} />
 
@@ -122,9 +124,15 @@ export default function ManagerApp() {
           <span style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.2)', display: 'inline-block' }} />
           <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Панель управляющего</span>
         </div>
-        <button onClick={logout} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '6px 14px', borderRadius: 8, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit' }}>
-          <Icon.Logout /> Выйти
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => navigate('/login')} style={{ background: 'rgba(201,169,110,0.15)', border: '1px solid rgba(201,169,110,0.35)', color: '#c9a96e', padding: '6px 14px', borderRadius: 8, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit' }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            Главное меню
+          </button>
+          <button onClick={logout} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '6px 14px', borderRadius: 8, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit' }}>
+            <Icon.Logout /> Выйти
+          </button>
+        </div>
       </div>
 
       <div style={{ background: '#fff', borderBottom: '1px solid #e8e8e8', padding: '0 24px', display: 'flex', overflowX: 'auto', flexShrink: 0 }}>
