@@ -383,6 +383,82 @@ app.get('/api/export/orders/excel', async (req, res) => {
 app.get('/health', (req, res) => res.json({ ok: true }))
 
 // ─── ACCOUNTING AUTH ──────────────────────────────────────────
+// ─── ЕДИНАЯ СИСТЕМА ПОЛЬЗОВАТЕЛЕЙ ────────────────────────────
+
+// Инициализация админа (только если нет ни одного пользователя)
+app.post('/api/auth/init', async (req, res) => {
+  try {
+    const count = await prisma.user.count()
+    if (count > 0) return res.status(403).json({ error: 'Система уже инициализирована' })
+    const { password } = req.body
+    if (!password) return res.status(400).json({ error: 'Нужен пароль' })
+    const admin = await prisma.user.create({
+      data: { username: 'admin', password, name: 'Администратор', role: 'ADMIN' }
+    })
+    res.json({ ok: true, user: { id: admin.id, username: admin.username, name: admin.name, role: admin.role } })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// Проверка инициализации
+app.get('/api/auth/status', async (req, res) => {
+  try {
+    const count = await prisma.user.count()
+    res.json({ initialized: count > 0 })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// Логин
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body
+    const user = await prisma.user.findFirst({ where: { username, active: true } })
+    if (!user || user.password !== password) return res.status(401).json({ error: 'Неверный логин или пароль' })
+    res.json({ ok: true, user: { id: user.id, username: user.username, name: user.name, role: user.role } })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// Список пользователей (для админа)
+app.get('/api/auth/users', async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({ orderBy: { createdAt: 'asc' }, select: { id: true, username: true, name: true, role: true, active: true, createdAt: true } })
+    res.json(users)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// Создать пользователя
+app.post('/api/auth/users', async (req, res) => {
+  try {
+    const { username, password, name, role } = req.body
+    if (!username || !password || !name || !role) return res.status(400).json({ error: 'Все поля обязательны' })
+    const existing = await prisma.user.findFirst({ where: { username } })
+    if (existing) return res.status(400).json({ error: 'Пользователь уже существует' })
+    const user = await prisma.user.create({ data: { username, password, name, role } })
+    res.json({ ok: true, user: { id: user.id, username: user.username, name: user.name, role: user.role } })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// Обновить пользователя
+app.put('/api/auth/users/:id', async (req, res) => {
+  try {
+    const { password, name, role, active } = req.body
+    const data = {}
+    if (password) data.password = password
+    if (name) data.name = name
+    if (role) data.role = role
+    if (active !== undefined) data.active = active
+    const user = await prisma.user.update({ where: { id: Number(req.params.id) }, data })
+    res.json({ ok: true, user: { id: user.id, username: user.username, name: user.name, role: user.role, active: user.active } })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// Удалить пользователя
+app.delete('/api/auth/users/:id', async (req, res) => {
+  try {
+    await prisma.user.delete({ where: { id: Number(req.params.id) } })
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
 app.post('/api/accounting/login', async (req, res) => {
   try {
     const { username, password } = req.body

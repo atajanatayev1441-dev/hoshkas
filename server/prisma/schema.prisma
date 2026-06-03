@@ -377,3 +377,23 @@ model StockTransferItem {
   quantity    Float
 }
 
+
+// ─── ЕДИНАЯ СИСТЕМА ПОЛЬЗОВАТЕЛЕЙ ────────────────────────────
+enum UserRole {
+  ADMIN
+  CASHIER
+  ACCOUNTANT
+  MANAGER
+  WAREHOUSE
+  WAITER
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  name      String
+  role      UserRole
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
