@@ -29,44 +29,13 @@ const tdSt = { padding:'10px 14px', borderTop:'1px solid #f0f0f0', fontSize:13 }
 function Loader() { return <div style={{textAlign:'center',padding:40,color:'#aaa'}}>Загрузка...</div> }
 function Empty({text}) { return <div style={{textAlign:'center',padding:40,color:'#aaa',...card}}>{text}</div> }
 
-// ─── LOGIN ────────────────────────────────────────────────────
-function LoginScreen({ onLogin }) {
-  const [u, setU] = useState(''), [p, setP] = useState(''), [err, setErr] = useState(''), [loading, setLoading] = useState(false)
-  async function login() {
-    setLoading(true); setErr('')
-    const res = await fetch(`${API}/accounting/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})})
-    if (!res.ok) { setErr('Неверный логин или пароль'); setLoading(false); return }
-    onLogin((await res.json()).username)
-    setLoading(false)
-  }
-  return (
-    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#1a1a2e,#16213e)',padding:20}}>
-      <div style={{background:'#fff',borderRadius:24,padding:'44px 40px',width:'100%',maxWidth:380,boxShadow:'0 24px 64px rgba(0,0,0,0.35)'}}>
-        <div style={{textAlign:'center',marginBottom:32}}>
-          <div style={{fontSize:11,fontWeight:700,letterSpacing:3,color:'#888',marginBottom:6,textTransform:'uppercase'}}>HOS LOUNGE</div>
-          <div style={{fontSize:24,fontWeight:800,color:'#1a1a2e'}}>Бухгалтерия</div>
-          <div style={{fontSize:13,color:'#aaa',marginTop:6}}>Только для уполномоченных лиц</div>
-        </div>
-        <input value={u} onChange={e=>setU(e.target.value)} placeholder="Логин" style={{...inputSt,width:'100%',marginBottom:10,boxSizing:'border-box',padding:'12px 14px',fontSize:14}} />
-        <input value={p} onChange={e=>setP(e.target.value)} placeholder="Пароль" type="password" onKeyDown={e=>e.key==='Enter'&&login()} style={{...inputSt,width:'100%',marginBottom:12,boxSizing:'border-box',padding:'12px 14px',fontSize:14}} />
-        {err && <div style={{color:'#e74c3c',fontSize:13,marginBottom:12,textAlign:'center'}}>{err}</div>}
-        <button onClick={login} disabled={loading||!u||!p} style={{...btnSt(),width:'100%',justifyContent:'center',padding:14,fontSize:15,opacity:loading?0.7:1}}>
-          {loading?'Вход...':'Войти'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
 // ─── MAIN ─────────────────────────────────────────────────────
 export default function AccountingApp() {
-  const [user, setUser] = useState(() => sessionStorage.getItem('acc_user'))
   const [tab, setTab] = useState('dashboard')
   const navigate = useNavigate()
+  const user = JSON.parse(sessionStorage.getItem('hos_user') || 'null')
 
-  function logout() { sessionStorage.removeItem('acc_user'); setUser(null) }
-  function handleLogin(u) { sessionStorage.setItem('acc_user',u); setUser(u) }
-  if (!user) return <LoginScreen onLogin={handleLogin} />
+  function logout() { sessionStorage.removeItem('hos_user'); navigate('/login') }
 
   const tabs = [
     { key:'dashboard',   label:'Дашборд' },
@@ -95,7 +64,7 @@ export default function AccountingApp() {
             Главное меню
           </button>
           <button onClick={logout} style={{background:'rgba(255,255,255,0.1)',border:'none',color:'#fff',padding:'6px 14px',borderRadius:8,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>
-            Выйти ({user})
+            Выйти ({user?.name || user?.username})
           </button>
         </div>
       </div>

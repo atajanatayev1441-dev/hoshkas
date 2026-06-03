@@ -42,71 +42,13 @@ function safeWS(onMessage) {
   }
 }
 
-// ─── LOGIN ────────────────────────────────────────────────────
-function LoginScreen({ onLogin }) {
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-
-  async function handleLogin() {
-    setLoading(true)
-    setError('')
-    try {
-      const res = await fetch(`${API}/manager/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
-      })
-      if (!res.ok) { setError('Неверный пароль'); setLoading(false); return }
-      onLogin()
-    } catch {
-      setError('Ошибка соединения')
-    }
-    setLoading(false)
-  }
-
-  return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#1a1a2e 0%,#16213e 60%,#0f3460 100%)', padding: 20 }}>
-      <div style={{ background: '#fff', borderRadius: 24, padding: '44px 40px', width: '100%', maxWidth: 380, boxShadow: '0 24px 64px rgba(0,0,0,0.35)' }}>
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ width: 60, height: 60, background: 'linear-gradient(135deg,#1a1a2e,#2d2d4e)', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#c9a96e' }}>
-            <Icon.Trophy />
-          </div>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, color: '#888', marginBottom: 6, textTransform: 'uppercase' }}>HOS LOUNGE</div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#1a1a2e' }}>Управляющий</div>
-          <div style={{ fontSize: 13, color: '#aaa', marginTop: 6 }}>Панель управления</div>
-        </div>
-        <input
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          placeholder="Пароль"
-          type="password"
-          onKeyDown={e => e.key === 'Enter' && handleLogin()}
-          style={{ border: '1.5px solid #e8e8e8', borderRadius: 12, padding: '13px 16px', fontSize: 15, outline: 'none', width: '100%', marginBottom: 12, fontFamily: 'inherit', boxSizing: 'border-box' }}
-        />
-        {error && <div style={{ color: '#e74c3c', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>{error}</div>}
-        <button
-          onClick={handleLogin}
-          disabled={loading || !password}
-          style={{ background: 'linear-gradient(135deg,#1a1a2e,#2d2d4e)', color: '#fff', border: 'none', borderRadius: 12, padding: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer', width: '100%', fontFamily: 'inherit', opacity: loading ? 0.7 : 1 }}
-        >
-          {loading ? 'Вход...' : 'Войти'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
 // ─── MAIN APP ─────────────────────────────────────────────────
 export default function ManagerApp() {
-  const [auth, setAuth] = useState(() => sessionStorage.getItem('mgr_auth') === 'true')
   const [tab, setTab] = useState('dashboard')
   const navigate = useNavigate()
+  const user = JSON.parse(sessionStorage.getItem('hos_user') || 'null')
 
-  function handleLogin() { sessionStorage.setItem('mgr_auth', 'true'); setAuth(true) }
-  function logout() { sessionStorage.removeItem('mgr_auth'); setAuth(false); navigate('/login') }
-
-  if (!auth) return <LoginScreen onLogin={handleLogin} />
+  function logout() { sessionStorage.removeItem('hos_user'); navigate('/login') }
 
   const tabs = [
     { key: 'dashboard', label: 'Дашборд', icon: <Icon.Dashboard /> },
