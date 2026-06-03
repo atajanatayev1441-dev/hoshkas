@@ -58,7 +58,7 @@ export default function CashierPage() {
     try {
       const today = new Date().toISOString().slice(0, 10)
       const [summary, expenses, recentOrd] = await Promise.all([
-        fetch(`${API}/accounting/summary?from=${today}&to=${today}`).then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch(`${API}/accounting/full-summary?from=${today}&to=${today}`).then(r => r.ok ? r.json() : null).catch(() => null),
         fetch(`${API}/accounting/expenses?from=${today}&to=${today}`).then(r => r.ok ? r.json() : null).catch(() => null),
         fetch(`${API}/orders/recent?limit=200`).then(r => r.json()).catch(() => []),
       ])
@@ -122,6 +122,8 @@ export default function CashierPage() {
           setOpenOrders(prev => prev.filter(o => o.id !== data.id))
           setPendingOrders(prev => prev.filter(o => o.id !== data.id))
           if (activeOrder?.id === data.id) { setActiveOrder(null); setCart([]) }
+          // Автообновление аналитики при оплате
+          setActiveTab(prev => { if (prev === 'analytics') loadAnalytics(); return prev })
         }
         if (event === 'order_cancelled') {
           setOpenOrders(prev => prev.filter(o => o.id !== data.id))
@@ -273,6 +275,7 @@ export default function CashierPage() {
       setCart([])
       setSelectedTable(null)
       loadRecentOrders()
+      setAnalytics(null) // сбросить чтобы обновилось при следующем открытии
     } catch (e) { alert('Ошибка: ' + e.message) }
     setLoading(false)
   }
@@ -292,6 +295,7 @@ export default function CashierPage() {
       await printReceipt(order)
       setCart([])
       setComment('')
+      setAnalytics(null)
     } catch (e) { alert('Ошибка: ' + e.message) }
     setLoading(false)
   }
