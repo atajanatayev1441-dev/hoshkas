@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { createServer } from 'http'
 import { WebSocketServer } from 'ws'
+import { readFileSync } from 'fs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -1801,6 +1802,27 @@ app.get('/api/accounting/stock-reconciliation', async (req, res) => {
     res.json(reconciliation)
   } catch(e) { res.status(500).json({ error: e.message }) }
 })
+
+// ─── ИСТОРИЧЕСКИЕ ДАННЫЕ ATLANT ──────────────────────────────
+let atlant = { dept_sales: {}, dynamics: {}, staff: [], rejected: [] }
+try {
+  atlant = JSON.parse(readFileSync(join(__dirname, 'atlant_data.json'), 'utf8'))
+} catch(e) { console.log('atlant_data.json not found, skipping') }
+
+app.get('/api/atlant/dept-sales', (req, res) => {
+  const { dept } = req.query
+  if (dept && atlant.dept_sales[dept]) return res.json(atlant.dept_sales[dept])
+  res.json(atlant.dept_sales)
+})
+
+app.get('/api/atlant/dynamics', (req, res) => {
+  const { dept } = req.query
+  if (dept && atlant.dynamics[dept]) return res.json(atlant.dynamics[dept])
+  res.json(atlant.dynamics)
+})
+
+app.get('/api/atlant/staff', (req, res) => res.json(atlant.staff))
+app.get('/api/atlant/rejected', (req, res) => res.json(atlant.rejected))
 
 // ─── RESET DATABASE ───────────────────────────────────────────
 app.post('/api/admin/reset', async (req, res) => {

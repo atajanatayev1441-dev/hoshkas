@@ -49,6 +49,10 @@ export default function AccountingApp({ onLogout }) {
     { key:'reconciliation',   label:'Сверка склада' },
     { key:'detail',           label:'Детальный отчёт' },
     { key:'departments',      label:'По подразделениям' },
+    { key:'hist_dept',        label:'История: Подразделения' },
+    { key:'hist_dynamics',    label:'История: Динамика' },
+    { key:'hist_staff',       label:'История: Персонал' },
+    { key:'hist_rejected',    label:'История: Отказные' },
     { key:'staff',            label:'Отчёт по персоналу' },
     { key:'rejected',         label:'Отказные чеки' },
     { key:'dynamics',         label:'Динамика по месяцам' },
@@ -92,6 +96,10 @@ export default function AccountingApp({ onLogout }) {
         {tab==='reconciliation'  && <StockReconciliation />}
         {tab==='detail'          && <DetailReport />}
         {tab==='departments'     && <DepartmentsReport />}
+        {tab==='hist_dept'       && <HistDeptSales />}
+        {tab==='hist_dynamics'   && <HistDynamics />}
+        {tab==='hist_staff'      && <HistStaff />}
+        {tab==='hist_rejected'   && <HistRejected />}
         {tab==='staff'           && <StaffReport />}
         {tab==='rejected'        && <RejectedReport />}
         {tab==='dynamics'        && <MonthlyDynamics />}
@@ -1368,6 +1376,454 @@ function StockReconciliation() {
           {filtered.length===0 && <div style={{textAlign:'center',padding:30,color:'#aaa'}}>Нет данных</div>}
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── ИСТОРИЯ: ПРОДАЖИ ПО ПОДРАЗДЕЛЕНИЯМ ──────────────────────
+function HistDeptSales() {
+  const DEPTS = ['БАР','ГОРЯЧИЙ ЦЕХ','ХОЛОДНЫЙ ЦЕХ','МУЧНОЙ ЦЕХ']
+  const [dept, setDept] = React.useState('БАР')
+  const [data, setData] = React.useState(null)
+  const [loading, setLoading] = React.useState(false)
+  const [search, setSearch] = React.useState('')
+  const [sortKey, setSortKey] = React.useState('total')
+
+  React.useEffect(() => {
+    setLoading(true); setSearch('')
+    fetch(`/api/atlant/dept-sales?dept=${encodeURIComponent(dept)}`)
+      .then(r => r.json()).then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) }).catch(() => setLoading(false))
+  }, [dept])
+
+  const filtered = (data || [])
+    .filter(i => !search || i.name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => sortKey === 'name' ? a.name.localeCompare(b.name) : b[sortKey] - a[sortKey])
+
+  const totalQty = filtered.reduce((s, i) => s + i.qty, 0)
+  const totalRev = filtered.reduce((s, i) => s + i.total, 0)
+
+  function doExcel() {
+    exportToExcel(filtered, `продажи_${dept}_13.04-01.06`, [
+      {key:'dish_type',label:'Тип блюда'},{key:'name',label:'Наименование'},{key:'qty',label:'Кол-во'},{key:'price',label:'Цена'},{key:'total',label:'Сумма (TMT)'}
+    ])
+  }
+
+  return (
+    <div style={{padding:24}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:700,color:'#1a1a2e'}}>Продажи по подразделениям</div>
+          <div style={{fontSize:12,color:'#aaa',marginTop:3}}>Исторические данные 13.04 — 01.06.2026</div>
+        </div>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          <ExcelBtn onClick={doExcel}/>
+        </div>
+      </div>
+
+      {/* Табы подразделений */}
+      <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
+        {DEPTS.map(d => (
+          <button key={d} onClick={() => setDept(d)}
+            style={{background:dept===d?'#1a1a2e':'#f5f5f5',color:dept===d?'#fff':'#555',border:'none',borderRadius:8,padding:'8px 16px',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+            {d}
+          </button>
+        ))}
+      </div>
+
+      {/* Итоги */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:10,marginBottom:16}}>
+        {[
+          {l:'Позиций',v:filtered.length,c:'#8e44ad'},
+          {l:'Продано (шт)',v:totalQty,c:'#2980b9'},
+          {l:'Выручка',v:`${fmt(totalRev)} TMT`,c:'#27ae60'},
+          {l:'Средняя цена',v:`${fmt(totalQty ? totalRev/totalQty : 0)} TMT`,c:'#e67e22'},
+        ].map(c => (
+          <div key={c.l} style={cardSt}>
+            <div style={{fontSize:11,color:'#aaa',fontWeight:600,textTransform:'uppercase',marginBottom:4}}>{c.l}</div>
+            <div style={{fontSize:18,fontWeight:800,color:c.c}}>{c.v}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Поиск и сортировка */}
+      <div style={{display:'flex',gap:10,marginBottom:12,alignItems:'center',flexWrap:'wrap'}}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Поиск по блюду..."
+          style={{border:'1.5px solid #e8e8e8',borderRadius:8,padding:'7px 12px',fontSize:13,fontFamily:'inherit',outline:'none',width:220}}/>
+        <span style={{fontSize:13,color:'#aaa'}}>Сортировка:</span>
+        {[['total','По выручке'],['qty','По кол-ву'],['name','По алфавиту']].map(([k,l]) => (
+          <button key={k} onClick={() => setSortKey(k)}
+            style={{background:sortKey===k?'#1a1a2e':'#f5f5f5',color:sortKey===k?'#fff':'#555',border:'none',borderRadius:7,padding:'5px 12px',fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {loading && <div style={{textAlign:'center',padding:40,color:'#aaa'}}>Загрузка...</div>}
+      {!loading && (
+        <div style={cardSt}>
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
+            <thead><tr>
+              <th style={thSt2}>#</th>
+              <th style={thSt2}>Тип блюда</th>
+              <th style={thSt2}>Наименование</th>
+              <th style={{...thSt2,textAlign:'right'}}>Кол-во</th>
+              <th style={{...thSt2,textAlign:'right'}}>Цена</th>
+              <th style={{...thSt2,textAlign:'right'}}>Сумма (TMT)</th>
+              <th style={{...thSt2,textAlign:'right'}}>Доля</th>
+            </tr></thead>
+            <tbody>
+              {filtered.map((item, i) => (
+                <tr key={i} style={{background: i%2===0?'transparent':'#fafafa'}}>
+                  <td style={{...tdSt2,color:'#aaa'}}>{i+1}</td>
+                  <td style={{...tdSt2,fontSize:11,color:'#888'}}>{item.dish_type}</td>
+                  <td style={{...tdSt2,fontWeight:600}}>{item.name}</td>
+                  <td style={{...tdSt2,textAlign:'right'}}>×{item.qty}</td>
+                  <td style={{...tdSt2,textAlign:'right',color:'#888'}}>{fmt(item.price)}</td>
+                  <td style={{...tdSt2,textAlign:'right',fontWeight:700,color:'#27ae60'}}>{fmt(item.total)}</td>
+                  <td style={{...tdSt2,textAlign:'right'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:5,justifyContent:'flex-end'}}>
+                      <div style={{width:40,height:5,background:'#f0f0f0',borderRadius:3,overflow:'hidden'}}>
+                        <div style={{width:`${totalRev ? Math.min(100,(item.total/totalRev)*100) : 0}%`,height:'100%',background:'#c9a96e',borderRadius:3}}/>
+                      </div>
+                      <span style={{fontSize:11,color:'#aaa',minWidth:30}}>{totalRev ? ((item.total/totalRev)*100).toFixed(1) : 0}%</span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{background:'#f8f9fa'}}>
+                <td colSpan={3} style={{...tdSt2,fontWeight:700}}>ИТОГО</td>
+                <td style={{...tdSt2,textAlign:'right',fontWeight:700}}>×{totalQty}</td>
+                <td style={tdSt2}></td>
+                <td style={{...tdSt2,textAlign:'right',fontWeight:800,color:'#27ae60'}}>{fmt(totalRev)} TMT</td>
+                <td style={tdSt2}></td>
+              </tr>
+            </tfoot>
+          </table>
+          {filtered.length === 0 && <div style={{textAlign:'center',padding:30,color:'#aaa'}}>Нет данных</div>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── ИСТОРИЯ: ДИНАМИКА ПО МЕСЯЦАМ ────────────────────────────
+function HistDynamics() {
+  const DEPTS = ['БАР','ГОРЯЧИЙ ЦЕХ','МУЧНОЙ ЦЕХ','ХОЛОДНЫЙ ЦЕХ']
+  const MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь']
+  const [dept, setDept] = React.useState('БАР')
+  const [data, setData] = React.useState(null)
+  const [loading, setLoading] = React.useState(false)
+  const [group, setGroup] = React.useState('all')
+
+  React.useEffect(() => {
+    setLoading(true)
+    fetch(`/api/atlant/dynamics?dept=${encodeURIComponent(dept)}`)
+      .then(r => r.json()).then(d => { setData(Array.isArray(d) ? d : []); setLoading(false) }).catch(() => setLoading(false))
+  }, [dept])
+
+  const groups = data ? [...new Set(data.map(i => i.group).filter(Boolean))] : []
+  const filtered = (data || []).filter(i => group === 'all' || i.group === group)
+
+  // Суммы по месяцам
+  const monthTotals = MONTHS.reduce((acc, m) => {
+    acc[m] = filtered.reduce((s, i) => s + (i.months[m] || 0), 0)
+    return acc
+  }, {})
+  const maxMonth = Math.max(...Object.values(monthTotals), 1)
+
+  function doExcel() {
+    const rows = filtered.map(i => {
+      const row = {name: i.name, group: i.group}
+      MONTHS.forEach(m => { row[m] = i.months[m] || 0 })
+      row.total = i.total
+      return row
+    })
+    exportToExcel(rows, `динамика_${dept}_2026`, [
+      {key:'group',label:'Группа'},{key:'name',label:'Блюдо'},
+      ...MONTHS.map(m => ({key:m,label:m})),
+      {key:'total',label:'Итого'}
+    ])
+  }
+
+  return (
+    <div style={{padding:24}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:700,color:'#1a1a2e'}}>Динамика продаж по месяцам</div>
+          <div style={{fontSize:12,color:'#aaa',marginTop:3}}>Исторические данные 2026</div>
+        </div>
+        <ExcelBtn onClick={doExcel}/>
+      </div>
+
+      <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+        {DEPTS.map(d => (
+          <button key={d} onClick={() => setDept(d)}
+            style={{background:dept===d?'#1a1a2e':'#f5f5f5',color:dept===d?'#fff':'#555',border:'none',borderRadius:8,padding:'7px 14px',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+            {d}
+          </button>
+        ))}
+      </div>
+
+      {groups.length > 0 && (
+        <div style={{display:'flex',gap:6,marginBottom:16,flexWrap:'wrap'}}>
+          <button onClick={() => setGroup('all')} style={{background:group==='all'?'#c9a96e':'#f5f5f5',color:group==='all'?'#fff':'#555',border:'none',borderRadius:6,padding:'4px 12px',fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>Все группы</button>
+          {groups.map(g => (
+            <button key={g} onClick={() => setGroup(g)} style={{background:group===g?'#c9a96e':'#f5f5f5',color:group===g?'#fff':'#555',border:'none',borderRadius:6,padding:'4px 12px',fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>{g}</button>
+          ))}
+        </div>
+      )}
+
+      {/* Гистограмма по месяцам */}
+      <div style={{...cardSt,marginBottom:16}}>
+        <div style={{fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:14}}>Продажи (шт) по месяцам</div>
+        <div style={{display:'flex',alignItems:'flex-end',gap:8,height:80}}>
+          {MONTHS.map(m => {
+            const val = monthTotals[m]
+            const h = val ? Math.max(6,(val/maxMonth)*70) : 3
+            return (
+              <div key={m} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+                <div style={{fontSize:10,color:'#1a1a2e',fontWeight:700,display:val?'block':'none'}}>{val}</div>
+                <div title={`${m}: ${val} шт`} style={{width:'100%',height:h,background:val?'#c9a96e':'#f0f0f0',borderRadius:'3px 3px 0 0',cursor:'default'}}/>
+                <div style={{fontSize:9,color:'#aaa',textAlign:'center',lineHeight:1.2}}>{m.slice(0,3)}</div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {loading && <div style={{textAlign:'center',padding:40,color:'#aaa'}}>Загрузка...</div>}
+      {!loading && (
+        <div style={cardSt}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+            <thead><tr>
+              <th style={thSt2}>Группа</th>
+              <th style={thSt2}>Блюдо</th>
+              {MONTHS.filter(m => monthTotals[m] > 0).map(m => <th key={m} style={{...thSt2,textAlign:'right'}}>{m.slice(0,3)}</th>)}
+              <th style={{...thSt2,textAlign:'right'}}>Итого</th>
+            </tr></thead>
+            <tbody>
+              {filtered.filter(i => i.total > 0).sort((a,b) => b.total-a.total).map((item, idx) => (
+                <tr key={idx} style={{background:idx%2===0?'transparent':'#fafafa'}}>
+                  <td style={{...tdSt2,fontSize:11,color:'#888'}}>{item.group}</td>
+                  <td style={{...tdSt2,fontWeight:500}}>{item.name}</td>
+                  {MONTHS.filter(m => monthTotals[m] > 0).map(m => (
+                    <td key={m} style={{...tdSt2,textAlign:'right',color:item.months[m]?'#1a1a2e':'#ddd'}}>
+                      {item.months[m] || '—'}
+                    </td>
+                  ))}
+                  <td style={{...tdSt2,textAlign:'right',fontWeight:700,color:'#c9a96e'}}>{item.total}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{background:'#f8f9fa'}}>
+                <td colSpan={2} style={{...tdSt2,fontWeight:700}}>ИТОГО</td>
+                {MONTHS.filter(m => monthTotals[m] > 0).map(m => (
+                  <td key={m} style={{...tdSt2,textAlign:'right',fontWeight:700}}>{monthTotals[m]}</td>
+                ))}
+                <td style={{...tdSt2,textAlign:'right',fontWeight:800,color:'#c9a96e'}}>
+                  {filtered.reduce((s,i)=>s+i.total,0)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── ИСТОРИЯ: ПЕРСОНАЛ ────────────────────────────────────────
+function HistStaff() {
+  const [data, setData] = React.useState(null)
+  React.useEffect(() => {
+    fetch('/api/atlant/staff').then(r => r.json()).then(setData).catch(() => {})
+  }, [])
+
+  function doExcel() {
+    exportToExcel(data, 'персонал_13.04-01.06', [
+      {key:'name',label:'Сотрудник'},{key:'total_menu',label:'Сумма по меню'},{key:'discount',label:'Скидка'},{key:'to_pay',label:'К оплате'},{key:'service',label:'Сервис'},{key:'cash',label:'Наличные'},{key:'total_with_service',label:'Итого с сервисом'}
+    ])
+  }
+
+  if (!data) return <div style={{padding:40,textAlign:'center',color:'#aaa'}}>Загрузка...</div>
+
+  const total = {
+    total_menu: data.reduce((s,i)=>s+i.total_menu,0),
+    to_pay: data.reduce((s,i)=>s+i.to_pay,0),
+    service: data.reduce((s,i)=>s+i.service,0),
+    cash: data.reduce((s,i)=>s+i.cash,0),
+    total_with_service: data.reduce((s,i)=>s+i.total_with_service,0),
+  }
+
+  return (
+    <div style={{padding:24}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:700,color:'#1a1a2e'}}>Отчёт по персоналу</div>
+          <div style={{fontSize:12,color:'#aaa',marginTop:3}}>Исторические данные 13.04 — 01.06.2026</div>
+        </div>
+        <ExcelBtn onClick={doExcel}/>
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:10,marginBottom:20}}>
+        {[
+          {l:'Сотрудников',v:data.length,c:'#8e44ad'},
+          {l:'Сумма по меню',v:`${fmt(total.total_menu)} TMT`,c:'#2980b9'},
+          {l:'К оплате',v:`${fmt(total.to_pay)} TMT`,c:'#27ae60'},
+          {l:'Сервис',v:`${fmt(total.service)} TMT`,c:'#e67e22'},
+          {l:'Итого с сервисом',v:`${fmt(total.total_with_service)} TMT`,c:'#c0392b'},
+        ].map(c => (
+          <div key={c.l} style={cardSt}>
+            <div style={{fontSize:11,color:'#aaa',fontWeight:600,textTransform:'uppercase',marginBottom:4}}>{c.l}</div>
+            <div style={{fontSize:17,fontWeight:800,color:c.c}}>{c.v}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={cardSt}>
+        <table style={{width:'100%',borderCollapse:'collapse'}}>
+          <thead><tr>
+            <th style={thSt2}>Сотрудник</th>
+            <th style={{...thSt2,textAlign:'right'}}>По меню</th>
+            <th style={{...thSt2,textAlign:'right'}}>Скидка</th>
+            <th style={{...thSt2,textAlign:'right'}}>К оплате</th>
+            <th style={{...thSt2,textAlign:'right'}}>Сервис</th>
+            <th style={{...thSt2,textAlign:'right'}}>Наличные</th>
+            <th style={{...thSt2,textAlign:'right'}}>Итого с сервисом</th>
+            <th style={{...thSt2,textAlign:'right'}}>Доля</th>
+          </tr></thead>
+          <tbody>
+            {[...data].sort((a,b) => b.total_with_service-a.total_with_service).map((s, i) => (
+              <tr key={i}>
+                <td style={{...tdSt2,fontWeight:700}}>{s.name}</td>
+                <td style={{...tdSt2,textAlign:'right'}}>{fmt(s.total_menu)}</td>
+                <td style={{...tdSt2,textAlign:'right',color:'#e74c3c'}}>{s.discount > 0 ? `-${fmt(s.discount)}` : '—'}</td>
+                <td style={{...tdSt2,textAlign:'right'}}>{fmt(s.to_pay)}</td>
+                <td style={{...tdSt2,textAlign:'right',color:'#e67e22'}}>{fmt(s.service)}</td>
+                <td style={{...tdSt2,textAlign:'right'}}>{fmt(s.cash)}</td>
+                <td style={{...tdSt2,textAlign:'right',fontWeight:700,color:'#27ae60'}}>{fmt(s.total_with_service)}</td>
+                <td style={tdSt2}>
+                  <div style={{display:'flex',alignItems:'center',gap:5}}>
+                    <div style={{width:50,height:6,background:'#f0f0f0',borderRadius:3,overflow:'hidden'}}>
+                      <div style={{width:`${total.total_with_service ? (s.total_with_service/total.total_with_service)*100 : 0}%`,height:'100%',background:'#c9a96e',borderRadius:3}}/>
+                    </div>
+                    <span style={{fontSize:11,color:'#aaa'}}>
+                      {total.total_with_service ? ((s.total_with_service/total.total_with_service)*100).toFixed(1) : 0}%
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr style={{background:'#f8f9fa'}}>
+              <td style={{...tdSt2,fontWeight:700}}>ИТОГО</td>
+              <td style={{...tdSt2,textAlign:'right',fontWeight:700}}>{fmt(total.total_menu)}</td>
+              <td style={tdSt2}></td>
+              <td style={{...tdSt2,textAlign:'right',fontWeight:700}}>{fmt(total.to_pay)}</td>
+              <td style={{...tdSt2,textAlign:'right',fontWeight:700,color:'#e67e22'}}>{fmt(total.service)}</td>
+              <td style={{...tdSt2,textAlign:'right',fontWeight:700}}>{fmt(total.cash)}</td>
+              <td style={{...tdSt2,textAlign:'right',fontWeight:800,color:'#27ae60'}}>{fmt(total.total_with_service)}</td>
+              <td style={tdSt2}></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ─── ИСТОРИЯ: ОТКАЗНЫЕ ЧЕКИ ───────────────────────────────────
+function HistRejected() {
+  const [data, setData] = React.useState(null)
+  const [deptFilter, setDeptFilter] = React.useState('all')
+  React.useEffect(() => {
+    fetch('/api/atlant/rejected').then(r => r.json()).then(setData).catch(() => {})
+  }, [])
+
+  function doExcel() {
+    exportToExcel(data, 'отказные_13.04-01.06', [
+      {key:'order_time',label:'Время заказа'},{key:'cancel_time',label:'Время отказа'},{key:'diff_min',label:'Мин'},{key:'initiator',label:'Инициатор'},{key:'dept',label:'Подразделение'},{key:'name',label:'Блюдо'},{key:'qty',label:'Кол-во'},{key:'total',label:'Сумма (TMT)'},{key:'table',label:'Стол'},{key:'hall',label:'Зал'}
+    ])
+  }
+
+  if (!data) return <div style={{padding:40,textAlign:'center',color:'#aaa'}}>Загрузка...</div>
+
+  const depts = [...new Set(data.map(i => i.dept).filter(Boolean))]
+  const filtered = deptFilter === 'all' ? data : data.filter(i => i.dept === deptFilter)
+  const totalLoss = filtered.reduce((s,i) => s+i.total, 0)
+
+  return (
+    <div style={{padding:24}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:700,color:'#1a1a2e'}}>Отказные чеки</div>
+          <div style={{fontSize:12,color:'#aaa',marginTop:3}}>Исторические данные 13.04 — 01.06.2026</div>
+        </div>
+        <ExcelBtn onClick={doExcel}/>
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:10,marginBottom:16}}>
+        {[
+          {l:'Отказов',v:filtered.length,c:'#e74c3c'},
+          {l:'Потери',v:`${fmt(totalLoss)} TMT`,c:'#c0392b'},
+          {l:'Среднее время',v:`${filtered.length ? Math.round(filtered.reduce((s,i)=>s+i.diff_min,0)/filtered.length) : 0} мин`,c:'#e67e22'},
+        ].map(c => (
+          <div key={c.l} style={cardSt}>
+            <div style={{fontSize:11,color:'#aaa',fontWeight:600,textTransform:'uppercase',marginBottom:4}}>{c.l}</div>
+            <div style={{fontSize:18,fontWeight:800,color:c.c}}>{c.v}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
+        <button onClick={() => setDeptFilter('all')} style={{background:deptFilter==='all'?'#1a1a2e':'#f5f5f5',color:deptFilter==='all'?'#fff':'#555',border:'none',borderRadius:7,padding:'5px 12px',fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>Все</button>
+        {depts.map(d => (
+          <button key={d} onClick={() => setDeptFilter(d)} style={{background:deptFilter===d?'#1a1a2e':'#f5f5f5',color:deptFilter===d?'#fff':'#555',border:'none',borderRadius:7,padding:'5px 12px',fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>{d}</button>
+        ))}
+      </div>
+
+      <div style={cardSt}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+          <thead><tr>
+            <th style={thSt2}>Время заказа</th>
+            <th style={thSt2}>Время отказа</th>
+            <th style={{...thSt2,textAlign:'right'}}>Мин</th>
+            <th style={thSt2}>Инициатор</th>
+            <th style={thSt2}>Подразделение</th>
+            <th style={thSt2}>Блюдо</th>
+            <th style={{...thSt2,textAlign:'right'}}>Кол-во</th>
+            <th style={{...thSt2,textAlign:'right'}}>Сумма</th>
+            <th style={thSt2}>Стол / Зал</th>
+          </tr></thead>
+          <tbody>
+            {filtered.map((r, i) => (
+              <tr key={i} style={{background:i%2===0?'transparent':'#fafafa'}}>
+                <td style={{...tdSt2,fontSize:12}}>{r.order_time}</td>
+                <td style={{...tdSt2,fontSize:12}}>{r.cancel_time}</td>
+                <td style={{...tdSt2,textAlign:'right',color:r.diff_min>5?'#e74c3c':'#27ae60',fontWeight:600}}>{r.diff_min}</td>
+                <td style={tdSt2}>{r.initiator}</td>
+                <td style={{...tdSt2,fontSize:11}}><span style={{background:'#f0f0f0',padding:'2px 6px',borderRadius:5}}>{r.dept}</span></td>
+                <td style={{...tdSt2,fontWeight:500}}>{r.name}</td>
+                <td style={{...tdSt2,textAlign:'right'}}>×{r.qty}</td>
+                <td style={{...tdSt2,textAlign:'right',fontWeight:600,color:'#e74c3c'}}>{fmt(r.total)}</td>
+                <td style={{...tdSt2,fontSize:11,color:'#888'}}>{r.table} / {r.hall}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr style={{background:'#f8f9fa'}}>
+              <td colSpan={7} style={{...tdSt2,fontWeight:700}}>ИТОГО ПОТЕРИ</td>
+              <td style={{...tdSt2,textAlign:'right',fontWeight:800,color:'#e74c3c'}}>{fmt(totalLoss)} TMT</td>
+              <td style={tdSt2}></td>
+            </tr>
+          </tfoot>
+        </table>
+        {filtered.length === 0 && <div style={{textAlign:'center',padding:30,color:'#aaa'}}>Нет данных</div>}
+      </div>
     </div>
   )
 }
