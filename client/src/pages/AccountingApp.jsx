@@ -30,12 +30,16 @@ function Loader() { return <div style={{textAlign:'center',padding:40,color:'#aa
 function Empty({text}) { return <div style={{textAlign:'center',padding:40,color:'#aaa',...card}}>{text}</div> }
 
 // ─── MAIN ─────────────────────────────────────────────────────
-export default function AccountingApp() {
+export default function AccountingApp({ onLogout }) {
   const [tab, setTab] = useState('dashboard')
   const navigate = useNavigate()
   const user = JSON.parse(sessionStorage.getItem('hos_user') || 'null')
 
-  function logout() { sessionStorage.removeItem('hos_user'); navigate('/login') }
+  function logout() {
+    sessionStorage.removeItem('hos_user')
+    if (onLogout) onLogout()
+    navigate('/login')
+  }
 
   const tabs = [
     { key:'dashboard',        label:'Дашборд' },

@@ -227,8 +227,8 @@ function AppRoutes({ user, shift, setShift, onLogin, onLogout }) {
         <Route path="/waiters" element={<WaitersPage />} />
         <Route path="/warehouse" element={<WarehousePage />} />
         <Route path="/recipes" element={<RecipePage />} />
-        <Route path="/accounting" element={<AccountingApp />} />
-        <Route path="/manager" element={<ManagerApp />} />
+        <Route path="/accounting" element={<AccountingApp onLogout={onLogout} />} />
+        <Route path="/manager" element={<ManagerApp onLogout={onLogout} />} />
         <Route path="*" element={<Navigate to={ROLE_ROUTES[user.role] || '/cashier'} />} />
       </Routes>
     </>
