@@ -130,22 +130,48 @@ function ShiftBanner({ cashier, shift, onOpenShift, onCloseShift }) {
 }
 
 // ─── NAV ──────────────────────────────────────────────────────
+// Навигация по ролям
+const ROLE_NAV = {
+  CASHIER:    [
+    { to:'/cashier',  label:'Касса',       icon:<NavIcon.Cashier /> },
+    { to:'/reports',  label:'Аналитика',   icon:<NavIcon.Reports /> },
+  ],
+  ACCOUNTANT: [
+    { to:'/accounting', label:'Бухгалтерия', icon:<NavIcon.Accounting /> },
+    { to:'/reports',    label:'Аналитика',   icon:<NavIcon.Reports /> },
+  ],
+  MANAGER: [
+    { to:'/manager',  label:'Управляющий', icon:<NavIcon.Manager /> },
+    { to:'/reports',  label:'Аналитика',   icon:<NavIcon.Reports /> },
+    { to:'/menu',     label:'Меню',        icon:<NavIcon.Menu /> },
+    { to:'/waiters',  label:'Официанты',   icon:<NavIcon.Waiters /> },
+  ],
+  WAREHOUSE: [
+    { to:'/warehouse', label:'Склад',       icon:<NavIcon.Warehouse /> },
+    { to:'/recipes',   label:'Калькуляция', icon:<NavIcon.Recipe /> },
+  ],
+  WAITER: [
+    { to:'/waiters', label:'Официанты', icon:<NavIcon.Waiters /> },
+  ],
+  ADMIN: [
+    { to:'/admin',      label:'Панель',      icon:<NavIcon.Manager /> },
+    { to:'/cashier',    label:'Касса',        icon:<NavIcon.Cashier /> },
+    { to:'/accounting', label:'Бухгалтерия',  icon:<NavIcon.Accounting /> },
+    { to:'/manager',    label:'Управляющий',  icon:<NavIcon.Manager /> },
+    { to:'/warehouse',  label:'Склад',        icon:<NavIcon.Warehouse /> },
+    { to:'/reports',    label:'Аналитика',    icon:<NavIcon.Reports /> },
+    { to:'/menu',       label:'Меню',         icon:<NavIcon.Menu /> },
+  ],
+}
+
 function Nav({ user, onLogout }) {
   const loc = useLocation()
   const navigate = useNavigate()
+  // Страницы со своим хедером — не показываем Nav
   const noNav = ['/accounting', '/manager', '/admin', '/login']
   if (noNav.includes(loc.pathname)) return null
 
-  const links = [
-    { to:'/cashier', label:'Касса', icon:<NavIcon.Cashier /> },
-    { to:'/reports', label:'Аналитика', icon:<NavIcon.Reports /> },
-    { to:'/menu', label:'Меню', icon:<NavIcon.Menu /> },
-    { to:'/warehouse', label:'Склад', icon:<NavIcon.Warehouse /> },
-    { to:'/recipes', label:'Калькуляция', icon:<NavIcon.Recipe /> },
-    { to:'/waiters', label:'Официанты', icon:<NavIcon.Waiters /> },
-    { to:'/accounting', label:'Бухгалтерия', icon:<NavIcon.Accounting /> },
-    { to:'/manager', label:'Управляющий', icon:<NavIcon.Manager /> },
-  ]
+  const links = ROLE_NAV[user?.role] || []
 
   return (
     <nav className="nav">
@@ -219,17 +245,30 @@ function AppRoutes({ user, shift, setShift, onLogin, onLogout }) {
       )}
       <Routes>
         <Route path="/login" element={<Navigate to={ROLE_ROUTES[user.role] || '/cashier'} />} />
-        <Route path="/admin" element={user.role === 'ADMIN' ? <AdminPage user={user} onLogout={onLogout} /> : <Navigate to="/login" />} />
-        <Route path="/cashier" element={<CashierPage shift={shift} cashier={user} />} />
         <Route path="/" element={<Navigate to={ROLE_ROUTES[user.role] || '/cashier'} />} />
-        <Route path="/reports" element={<AccountingPage />} />
-        <Route path="/menu" element={<MenuPage />} />
-        <Route path="/waiters" element={<WaitersPage />} />
-        <Route path="/warehouse" element={<WarehousePage />} />
-        <Route path="/recipes" element={<RecipePage />} />
-        <Route path="/accounting" element={<AccountingApp onLogout={onLogout} />} />
-        <Route path="/manager" element={<ManagerApp onLogout={onLogout} />} />
-        <Route path="*" element={<Navigate to={ROLE_ROUTES[user.role] || '/cashier'} />} />
+
+        {/* ADMIN — полный доступ */}
+        <Route path="/admin" element={user.role === 'ADMIN' ? <AdminPage user={user} onLogout={onLogout} /> : <Navigate to={ROLE_ROUTES[user.role] || '/login'} />} />
+
+        {/* CASHIER */}
+        <Route path="/cashier" element={['CASHIER','ADMIN'].includes(user.role) ? <CashierPage shift={shift} cashier={user} /> : <Navigate to={ROLE_ROUTES[user.role]} />} />
+
+        {/* ACCOUNTANT */}
+        <Route path="/accounting" element={['ACCOUNTANT','ADMIN'].includes(user.role) ? <AccountingApp onLogout={onLogout} /> : <Navigate to={ROLE_ROUTES[user.role]} />} />
+
+        {/* MANAGER */}
+        <Route path="/manager" element={['MANAGER','ADMIN'].includes(user.role) ? <ManagerApp onLogout={onLogout} /> : <Navigate to={ROLE_ROUTES[user.role]} />} />
+
+        {/* WAREHOUSE */}
+        <Route path="/warehouse" element={['WAREHOUSE','MANAGER','ADMIN'].includes(user.role) ? <WarehousePage /> : <Navigate to={ROLE_ROUTES[user.role]} />} />
+        <Route path="/recipes"   element={['WAREHOUSE','MANAGER','ADMIN'].includes(user.role) ? <RecipePage />   : <Navigate to={ROLE_ROUTES[user.role]} />} />
+
+        {/* ОБЩИЕ — для нескольких ролей */}
+        <Route path="/reports" element={['CASHIER','ACCOUNTANT','MANAGER','ADMIN'].includes(user.role) ? <AccountingPage /> : <Navigate to={ROLE_ROUTES[user.role]} />} />
+        <Route path="/menu"    element={['MANAGER','ADMIN','CASHIER'].includes(user.role) ? <MenuPage />    : <Navigate to={ROLE_ROUTES[user.role]} />} />
+        <Route path="/waiters" element={['WAITER','MANAGER','ADMIN','CASHIER'].includes(user.role) ? <WaitersPage /> : <Navigate to={ROLE_ROUTES[user.role]} />} />
+
+        <Route path="*" element={<Navigate to={ROLE_ROUTES[user.role] || '/login'} />} />
       </Routes>
     </>
   )
