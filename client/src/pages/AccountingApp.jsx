@@ -38,16 +38,20 @@ export default function AccountingApp() {
   function logout() { sessionStorage.removeItem('hos_user'); navigate('/login') }
 
   const tabs = [
-    { key:'dashboard',   label:'Дашборд' },
-    { key:'detail',      label:'Детальный отчёт' },
-    { key:'departments', label:'По подразделениям' },
-    { key:'staff',       label:'Отчёт по персоналу' },
-    { key:'rejected',    label:'Отказные чеки' },
-    { key:'dynamics',    label:'Динамика по месяцам' },
-    { key:'pricecontrol',label:'Контроль цен' },
-    { key:'expenses',    label:'Расходы' },
-    { key:'debts',       label:'Долги' },
-    { key:'revisions',   label:'Ревизии' },
+    { key:'dashboard',        label:'Дашборд' },
+    { key:'cashbook',         label:'Кассовая книга' },
+    { key:'zreport',          label:'Z-Отчёты' },
+    { key:'margin',           label:'Себестоимость и маржа' },
+    { key:'reconciliation',   label:'Сверка склада' },
+    { key:'detail',           label:'Детальный отчёт' },
+    { key:'departments',      label:'По подразделениям' },
+    { key:'staff',            label:'Отчёт по персоналу' },
+    { key:'rejected',         label:'Отказные чеки' },
+    { key:'dynamics',         label:'Динамика по месяцам' },
+    { key:'pricecontrol',     label:'Контроль цен' },
+    { key:'expenses',         label:'Расходы' },
+    { key:'debts',            label:'Долги' },
+    { key:'revisions',        label:'Ревизии' },
   ]
 
   return (
@@ -77,16 +81,20 @@ export default function AccountingApp() {
         ))}
       </div>
       <div style={{flex:1,overflow:'auto'}}>
-        {tab==='dashboard'    && <Dashboard />}
-        {tab==='detail'       && <DetailReport />}
-        {tab==='departments'  && <DepartmentsReport />}
-        {tab==='staff'        && <StaffReport />}
-        {tab==='rejected'     && <RejectedReport />}
-        {tab==='dynamics'     && <MonthlyDynamics />}
-        {tab==='pricecontrol' && <PriceControl />}
-        {tab==='expenses'     && <Expenses />}
-        {tab==='debts'        && <Debts />}
-        {tab==='revisions'    && <Revisions />}
+        {tab==='dashboard'       && <Dashboard />}
+        {tab==='cashbook'        && <CashBook />}
+        {tab==='zreport'         && <ZReports />}
+        {tab==='margin'          && <MarginReport />}
+        {tab==='reconciliation'  && <StockReconciliation />}
+        {tab==='detail'          && <DetailReport />}
+        {tab==='departments'     && <DepartmentsReport />}
+        {tab==='staff'           && <StaffReport />}
+        {tab==='rejected'        && <RejectedReport />}
+        {tab==='dynamics'        && <MonthlyDynamics />}
+        {tab==='pricecontrol'    && <PriceControl />}
+        {tab==='expenses'        && <Expenses />}
+        {tab==='debts'           && <Debts />}
+        {tab==='revisions'       && <Revisions />}
       </div>
     </div>
   )
@@ -253,6 +261,10 @@ function DetailReport() {
           <div style={{background:'#eaf4fb',borderRadius:10,padding:'8px 16px',fontWeight:700,color:'#2980b9',border:'1px solid #a9cce3',fontSize:14}}>
             Чеков: {count}
           </div>
+          <button onClick={()=>exportToExcel(orders.map(o=>({num:o.orderNumber||o.id,date:fmtDT(o.createdAt),table:o.tableNumber||'—',cashier:o.cashierName||'—',pay:o.paymentType,total:fmt(o.total)})),`детальный_отчёт_${from}_${to}`,[{key:'num',label:'№'},{key:'date',label:'Дата'},{key:'table',label:'Стол'},{key:'cashier',label:'Кассир'},{key:'pay',label:'Оплата'},{key:'total',label:'Сумма (TMT)'}])} style={{display:'flex',alignItems:'center',gap:6,background:'#217346',color:'#fff',border:'none',borderRadius:8,padding:'7px 14px',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Excel
+          </button>
         </div>
       </div>
 
@@ -672,7 +684,12 @@ function Expenses() {
         <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={inputSt} />
         <span style={{color:'#888'}}>—</span>
         <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={inputSt} />
-        <div style={{marginLeft:'auto',background:'#fdf0ef',borderRadius:10,padding:'8px 16px',fontWeight:700,color:'#e74c3c',border:'1px solid #f5c6c6'}}>Итого: {fmt(total)} TMT</div>
+        <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
+          <button onClick={()=>exportToExcel(expenses.map(e=>({date:fmtDate(e.date),cat:EXPENSE_CATEGORIES[e.category]||e.category,desc:e.description||'',amount:fmt(e.amount)})),`расходы_${from}_${to}`,[{key:'date',label:'Дата'},{key:'cat',label:'Категория'},{key:'desc',label:'Описание'},{key:'amount',label:'Сумма (TMT)'}])} style={{display:'flex',alignItems:'center',gap:5,background:'#217346',color:'#fff',border:'none',borderRadius:8,padding:'6px 12px',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Excel
+          </button>
+          <div style={{background:'#fdf0ef',borderRadius:10,padding:'8px 16px',fontWeight:700,color:'#e74c3c',border:'1px solid #f5c6c6'}}>Итого: {fmt(total)} TMT</div>
+        </div>
       </div>
 
       {showForm && (
@@ -921,6 +938,430 @@ function Revisions() {
               </div>
             )
           })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── EXCEL УТИЛИТА ────────────────────────────────────────────
+function exportToExcel(data, filename, headers) {
+  const escape = v => {
+    if (v === null || v === undefined) return ''
+    const s = String(v)
+    if (s.includes(',') || s.includes('"') || s.includes('\n')) return `"${s.replace(/"/g,'""')}"`
+    return s
+  }
+  const rows = [headers.map(h => h.label)]
+  data.forEach(row => rows.push(headers.map(h => escape(row[h.key]))))
+  const csv = '\uFEFF' + rows.map(r => r.join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename + '.csv'; a.click()
+  URL.revokeObjectURL(url)
+}
+
+function ExcelBtn({ onClick }) {
+  return (
+    <button onClick={onClick} style={{ display:'flex', alignItems:'center', gap:6, background:'#217346', color:'#fff', border:'none', borderRadius:8, padding:'7px 14px', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit', boxShadow:'0 2px 8px rgba(33,115,70,0.3)' }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+      Выгрузить Excel
+    </button>
+  )
+}
+
+const cardSt = { background:'#fff', borderRadius:14, padding:'20px 22px', boxShadow:'0 2px 8px rgba(0,0,0,0.06)', border:'1px solid #e8e8e8' }
+const thSt2 = { padding:'10px 12px', textAlign:'left', fontWeight:700, fontSize:12, color:'#888', borderBottom:'2px solid #e8e8e8', whiteSpace:'nowrap' }
+const tdSt2 = { padding:'10px 12px', fontSize:13, borderBottom:'1px solid #f0f0f0' }
+
+// ─── КАССОВАЯ КНИГА ──────────────────────────────────────────
+function CashBook() {
+  const [data, setData] = React.useState(null)
+  const [loading, setLoading] = React.useState(false)
+  const [from, setFrom] = React.useState(new Date().toISOString().slice(0,10))
+  const [to, setTo] = React.useState(new Date().toISOString().slice(0,10))
+  const [expanded, setExpanded] = React.useState({})
+
+  async function load() {
+    setLoading(true)
+    const d = await fetch(`/api/cashbook?from=${from}&to=${to}`).then(r=>r.json()).catch(()=>null)
+    setData(d); setLoading(false)
+  }
+  React.useEffect(()=>{ load() },[])
+
+  function doExcel() {
+    if (!data) return
+    const rows = []
+    data.days.forEach(day => {
+      rows.push({ date: day.date, type: '', desc: `Остаток на начало дня`, amount: fmt(day.openBalance), balance: '' })
+      day.entries.forEach(e => rows.push({ date: fmtDT(e.time), type: e.type==='IN'?'Приход':'Расход', desc: e.desc, amount: fmt(e.amount), balance: '' }))
+      rows.push({ date: day.date, type: '', desc: `Остаток на конец дня`, amount: fmt(day.closeBalance), balance: '' })
+    })
+    exportToExcel(rows, `кассовая_книга_${from}_${to}`, [
+      {key:'date',label:'Дата/Время'},{key:'type',label:'Тип'},{key:'desc',label:'Описание'},{key:'amount',label:'Сумма (TMT)'}
+    ])
+  }
+
+  return (
+    <div style={{padding:24}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
+        <div style={{fontSize:18,fontWeight:700,color:'#1a1a2e'}}>Кассовая книга</div>
+        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+          <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{border:'1.5px solid #e8e8e8',borderRadius:8,padding:'7px 10px',fontSize:13,fontFamily:'inherit'}}/>
+          <span style={{color:'#aaa'}}>—</span>
+          <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={{border:'1.5px solid #e8e8e8',borderRadius:8,padding:'7px 10px',fontSize:13,fontFamily:'inherit'}}/>
+          <button onClick={load} style={{background:'#1a1a2e',color:'#fff',border:'none',borderRadius:8,padding:'7px 16px',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Показать</button>
+          {data && <ExcelBtn onClick={doExcel}/>}
+        </div>
+      </div>
+
+      {loading && <div style={{textAlign:'center',padding:40,color:'#aaa'}}>Загрузка...</div>}
+      {data && !loading && (
+        <>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:12,marginBottom:20}}>
+            {[
+              {label:'Текущий остаток',value:`${fmt(data.currentBalance)} TMT`,color:'#27ae60'},
+              {label:'Итого приход',value:`${fmt(data.days.reduce((s,d)=>s+d.totalIn,0))} TMT`,color:'#2980b9'},
+              {label:'Итого расход',value:`${fmt(data.days.reduce((s,d)=>s+d.totalOut,0))} TMT`,color:'#e74c3c'},
+              {label:'Дней',value:data.days.length,color:'#8e44ad'},
+            ].map(c=>(
+              <div key={c.label} style={cardSt}>
+                <div style={{fontSize:11,color:'#aaa',fontWeight:600,textTransform:'uppercase',letterSpacing:0.5,marginBottom:6}}>{c.label}</div>
+                <div style={{fontSize:20,fontWeight:800,color:c.color}}>{c.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {data.days.map(day=>(
+            <div key={day.date} style={{...cardSt,marginBottom:12}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer'}} onClick={()=>setExpanded(e=>({...e,[day.date]:!e[day.date]}))}>
+                <div style={{fontWeight:700,fontSize:14,color:'#1a1a2e'}}>{fmtDate(day.date)}</div>
+                <div style={{display:'flex',gap:16,alignItems:'center',fontSize:13}}>
+                  <span style={{color:'#27ae60'}}>+{fmt(day.totalIn)}</span>
+                  <span style={{color:'#e74c3c'}}>-{fmt(day.totalOut)}</span>
+                  <span style={{color:'#1a1a2e',fontWeight:700}}>Остаток: {fmt(day.closeBalance)} TMT</span>
+                  <span style={{color:'#aaa'}}>{expanded[day.date]?'▲':'▼'}</span>
+                </div>
+              </div>
+              {expanded[day.date] && (
+                <table style={{width:'100%',borderCollapse:'collapse',marginTop:12}}>
+                  <thead><tr>
+                    <th style={thSt2}>Время</th><th style={thSt2}>Тип</th><th style={thSt2}>Описание</th><th style={{...thSt2,textAlign:'right'}}>Сумма (TMT)</th>
+                  </tr></thead>
+                  <tbody>
+                    <tr><td style={tdSt2} colSpan={3}><span style={{color:'#888'}}>Остаток на начало дня</span></td><td style={{...tdSt2,textAlign:'right',fontWeight:700}}>{fmt(day.openBalance)}</td></tr>
+                    {day.entries.map((e,i)=>(
+                      <tr key={i}>
+                        <td style={tdSt2}>{fmtDT(e.time)}</td>
+                        <td style={tdSt2}><span style={{background:e.type==='IN'?'#eafaf1':'#fdf2f2',color:e.type==='IN'?'#27ae60':'#e74c3c',padding:'2px 8px',borderRadius:6,fontSize:12,fontWeight:600}}>{e.type==='IN'?'Приход':'Расход'}</span></td>
+                        <td style={tdSt2}>{e.desc}</td>
+                        <td style={{...tdSt2,textAlign:'right',fontWeight:600,color:e.type==='IN'?'#27ae60':'#e74c3c'}}>{e.type==='IN'?'+':'-'}{fmt(e.amount)}</td>
+                      </tr>
+                    ))}
+                    <tr><td style={tdSt2} colSpan={3}><span style={{color:'#888'}}>Остаток на конец дня</span></td><td style={{...tdSt2,textAlign:'right',fontWeight:800,color:'#1a1a2e'}}>{fmt(day.closeBalance)}</td></tr>
+                  </tbody>
+                </table>
+              )}
+            </div>
+          ))}
+          {data.days.length===0 && <div style={{textAlign:'center',padding:40,color:'#aaa'}}>Нет данных за выбранный период</div>}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── Z-ОТЧЁТЫ ─────────────────────────────────────────────────
+function ZReports() {
+  const [shifts, setShifts] = React.useState([])
+  const [selected, setSelected] = React.useState(null)
+  const [report, setReport] = React.useState(null)
+  const [loading, setLoading] = React.useState(false)
+
+  React.useEffect(()=>{
+    fetch('/api/shifts').then(r=>r.json()).then(d=>setShifts(Array.isArray(d)?d:[])).catch(()=>{})
+  },[])
+
+  async function loadReport(id) {
+    setLoading(true); setSelected(id)
+    const d = await fetch(`/api/shifts/${id}/zreport`).then(r=>r.json()).catch(()=>null)
+    setReport(d); setLoading(false)
+  }
+
+  function doExcel() {
+    if (!report) return
+    exportToExcel(report.topItems, `z_отчёт_смена_${selected}`, [
+      {key:'name',label:'Блюдо'},{key:'qty',label:'Кол-во'},{key:'total',label:'Сумма (TMT)'}
+    ])
+  }
+
+  function printReport() {
+    if (!report) return
+    const s = report.shift
+    const w = window.open('','_blank','width=400,height=600')
+    w.document.write(`<html><body style="font-family:monospace;font-size:12px;padding:16px">
+      <div style="text-align:center"><b>HOS LOUNGE</b><br>Z-ОТЧЁТ<br>Смена #${s.id}</div><hr>
+      <div>Кассир: ${s.cashierName}</div>
+      <div>Открыта: ${fmtDT(s.openedAt)}</div>
+      <div>Закрыта: ${fmtDT(s.closedAt)}</div><hr>
+      <div>Чеков: ${report.orders}</div>
+      <div>Наличными: ${fmt(report.totalCash)} TMT (${report.cashOrders} чеков)</div>
+      <div>Картой: ${fmt(report.totalCard)} TMT (${report.cardOrders} чеков)</div>
+      <div>Итого: ${fmt(report.totalRevenue)} TMT</div>
+      <div>Расходы: ${fmt(report.totalExpenses)} TMT</div>
+      <div>Прибыль: ${fmt(report.profit)} TMT</div>
+      <div>Средний чек: ${fmt(report.avgCheck)} TMT</div><hr>
+      <div><b>ТОП БЛЮД:</b></div>
+      ${report.topItems.map(i=>`<div>${i.name}: ${i.qty} шт — ${fmt(i.total)} TMT</div>`).join('')}
+      <hr><div style="text-align:center">${new Date().toLocaleString('ru-RU')}</div>
+    </body></html>`)
+    w.document.close(); w.print()
+  }
+
+  return (
+    <div style={{padding:24,display:'flex',gap:20}}>
+      <div style={{width:280,flexShrink:0}}>
+        <div style={{fontSize:16,fontWeight:700,color:'#1a1a2e',marginBottom:14}}>Смены</div>
+        {shifts.map(s=>(
+          <div key={s.id} onClick={()=>loadReport(s.id)}
+            style={{...cardSt,marginBottom:8,cursor:'pointer',borderColor:selected===s.id?'#c9a96e':'#e8e8e8',background:selected===s.id?'#fdf8f0':'#fff'}}>
+            <div style={{fontWeight:700,fontSize:13,color:'#1a1a2e'}}>Смена #{s.id} · {s.cashierName}</div>
+            <div style={{fontSize:12,color:'#aaa',marginTop:3}}>{fmtDT(s.openedAt)}</div>
+            <span style={{display:'inline-block',marginTop:5,padding:'2px 8px',borderRadius:6,fontSize:11,fontWeight:600,background:s.status==='CLOSED'?'#eafaf1':'#fff8ec',color:s.status==='CLOSED'?'#27ae60':'#e67e22'}}>{s.status==='CLOSED'?'Закрыта':'Открыта'}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{flex:1}}>
+        {loading && <div style={{textAlign:'center',padding:60,color:'#aaa'}}>Загрузка...</div>}
+        {!loading && !report && <div style={{textAlign:'center',padding:60,color:'#aaa'}}>Выберите смену</div>}
+        {!loading && report && (
+          <>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <div style={{fontSize:17,fontWeight:700,color:'#1a1a2e'}}>Z-Отчёт · Смена #{report.shift.id}</div>
+              <div style={{display:'flex',gap:8}}>
+                <ExcelBtn onClick={doExcel}/>
+                <button onClick={printReport} style={{display:'flex',alignItems:'center',gap:6,background:'#1a1a2e',color:'#fff',border:'none',borderRadius:8,padding:'7px 14px',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                  Печать
+                </button>
+              </div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:10,marginBottom:16}}>
+              {[
+                {l:'Выручка',v:`${fmt(report.totalRevenue)} TMT`,c:'#27ae60'},
+                {l:'Наличные',v:`${fmt(report.totalCash)} TMT`,c:'#2980b9'},
+                {l:'Карта',v:`${fmt(report.totalCard)} TMT`,c:'#8e44ad'},
+                {l:'Чеков',v:report.orders,c:'#e67e22'},
+                {l:'Средний чек',v:`${fmt(report.avgCheck)} TMT`,c:'#16a085'},
+                {l:'Расходы',v:`${fmt(report.totalExpenses)} TMT`,c:'#e74c3c'},
+                {l:'Прибыль',v:`${fmt(report.profit)} TMT`,c:report.profit>=0?'#27ae60':'#e74c3c'},
+              ].map(c=>(
+                <div key={c.l} style={cardSt}>
+                  <div style={{fontSize:11,color:'#aaa',fontWeight:600,textTransform:'uppercase',marginBottom:4}}>{c.l}</div>
+                  <div style={{fontSize:17,fontWeight:800,color:c.c}}>{c.v}</div>
+                </div>
+              ))}
+            </div>
+            <div style={cardSt}>
+              <div style={{fontWeight:700,fontSize:14,marginBottom:12,color:'#1a1a2e'}}>Топ блюд</div>
+              <table style={{width:'100%',borderCollapse:'collapse'}}>
+                <thead><tr><th style={thSt2}>Блюдо</th><th style={{...thSt2,textAlign:'right'}}>Кол-во</th><th style={{...thSt2,textAlign:'right'}}>Сумма</th></tr></thead>
+                <tbody>{report.topItems.map((i,idx)=>(
+                  <tr key={i.name}><td style={tdSt2}><span style={{color:'#c9a96e',fontWeight:700,marginRight:8}}>#{idx+1}</span>{i.name}</td><td style={{...tdSt2,textAlign:'right'}}>×{i.qty}</td><td style={{...tdSt2,textAlign:'right',fontWeight:600}}>{fmt(i.total)} TMT</td></tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── СЕБЕСТОИМОСТЬ И МАРЖА ────────────────────────────────────
+function MarginReport() {
+  const [data, setData] = React.useState(null)
+  const [loading, setLoading] = React.useState(false)
+  const [from, setFrom] = React.useState(new Date(Date.now()-30*86400000).toISOString().slice(0,10))
+  const [to, setTo] = React.useState(new Date().toISOString().slice(0,10))
+  const [sort, setSort] = React.useState('revenue')
+
+  async function load() {
+    setLoading(true)
+    const d = await fetch(`/api/accounting/margin?from=${from}&to=${to}`).then(r=>r.json()).catch(()=>null)
+    setData(d); setLoading(false)
+  }
+  React.useEffect(()=>{ load() },[])
+
+  function doExcel() {
+    if (!data) return
+    exportToExcel(data.items, `маржа_${from}_${to}`, [
+      {key:'name',label:'Блюдо'},{key:'qty',label:'Кол-во'},{key:'avgPrice',label:'Цена ср.'},{key:'avgCost',label:'Себест. ср.'},{key:'revenue',label:'Выручка'},{key:'cost',label:'Себестоимость'},{key:'margin',label:'Маржа'},{key:'marginPct',label:'Маржа %'}
+    ])
+  }
+
+  const sorted = data?.items ? [...data.items].sort((a,b)=> sort==='margin'?b.margin-a.margin : sort==='pct'?b.marginPct-a.marginPct : b.revenue-a.revenue) : []
+
+  return (
+    <div style={{padding:24}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
+        <div style={{fontSize:18,fontWeight:700,color:'#1a1a2e'}}>Себестоимость и маржа</div>
+        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+          <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{border:'1.5px solid #e8e8e8',borderRadius:8,padding:'7px 10px',fontSize:13,fontFamily:'inherit'}}/>
+          <span style={{color:'#aaa'}}>—</span>
+          <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={{border:'1.5px solid #e8e8e8',borderRadius:8,padding:'7px 10px',fontSize:13,fontFamily:'inherit'}}/>
+          <button onClick={load} style={{background:'#1a1a2e',color:'#fff',border:'none',borderRadius:8,padding:'7px 16px',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Показать</button>
+          {data && <ExcelBtn onClick={doExcel}/>}
+        </div>
+      </div>
+      {loading && <div style={{textAlign:'center',padding:40,color:'#aaa'}}>Загрузка...</div>}
+      {data && !loading && (
+        <>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:12,marginBottom:20}}>
+            {[
+              {l:'Выручка',v:`${fmt(data.totalRevenue)} TMT`,c:'#27ae60'},
+              {l:'Себестоимость',v:`${fmt(data.totalCost)} TMT`,c:'#e74c3c'},
+              {l:'Валовая прибыль',v:`${fmt(data.totalMargin)} TMT`,c:'#2980b9'},
+              {l:'Маржинальность',v:`${fmt(data.marginPct)}%`,c:'#8e44ad'},
+            ].map(c=>(
+              <div key={c.l} style={cardSt}>
+                <div style={{fontSize:11,color:'#aaa',fontWeight:600,textTransform:'uppercase',marginBottom:4}}>{c.l}</div>
+                <div style={{fontSize:20,fontWeight:800,color:c.c}}>{c.v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={cardSt}>
+            <div style={{display:'flex',gap:8,marginBottom:14,alignItems:'center'}}>
+              <span style={{fontSize:13,color:'#888'}}>Сортировка:</span>
+              {[['revenue','По выручке'],['margin','По марже'],['pct','По марже %']].map(([k,l])=>(
+                <button key={k} onClick={()=>setSort(k)} style={{background:sort===k?'#1a1a2e':'#f5f5f5',color:sort===k?'#fff':'#555',border:'none',borderRadius:7,padding:'5px 12px',fontSize:12,cursor:'pointer',fontFamily:'inherit'}}>{l}</button>
+              ))}
+            </div>
+            <table style={{width:'100%',borderCollapse:'collapse'}}>
+              <thead><tr>
+                <th style={thSt2}>Блюдо</th>
+                <th style={{...thSt2,textAlign:'right'}}>Кол-во</th>
+                <th style={{...thSt2,textAlign:'right'}}>Цена ср.</th>
+                <th style={{...thSt2,textAlign:'right'}}>Себест.</th>
+                <th style={{...thSt2,textAlign:'right'}}>Выручка</th>
+                <th style={{...thSt2,textAlign:'right'}}>Маржа</th>
+                <th style={{...thSt2,textAlign:'right'}}>Маржа %</th>
+              </tr></thead>
+              <tbody>{sorted.map(i=>{
+                const pct = i.marginPct
+                const barColor = pct>60?'#27ae60':pct>30?'#f39c12':'#e74c3c'
+                return (
+                  <tr key={i.name}>
+                    <td style={tdSt2}>{i.name}</td>
+                    <td style={{...tdSt2,textAlign:'right'}}>×{i.qty}</td>
+                    <td style={{...tdSt2,textAlign:'right'}}>{fmt(i.avgPrice)}</td>
+                    <td style={{...tdSt2,textAlign:'right',color:'#e74c3c'}}>{fmt(i.avgCost)}</td>
+                    <td style={{...tdSt2,textAlign:'right',fontWeight:600}}>{fmt(i.revenue)}</td>
+                    <td style={{...tdSt2,textAlign:'right',color:i.margin>=0?'#27ae60':'#e74c3c',fontWeight:600}}>{fmt(i.margin)}</td>
+                    <td style={{...tdSt2,textAlign:'right'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6,justifyContent:'flex-end'}}>
+                        <div style={{width:50,height:6,background:'#f0f0f0',borderRadius:3,overflow:'hidden'}}>
+                          <div style={{width:`${Math.min(100,Math.max(0,pct))}%`,height:'100%',background:barColor,borderRadius:3}}/>
+                        </div>
+                        <span style={{color:barColor,fontWeight:600,minWidth:36}}>{fmt(pct)}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}</tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── СВЕРКА СКЛАДА ────────────────────────────────────────────
+function StockReconciliation() {
+  const [data, setData] = React.useState(null)
+  const [loading, setLoading] = React.useState(false)
+  const [from, setFrom] = React.useState(new Date(Date.now()-30*86400000).toISOString().slice(0,10))
+  const [to, setTo] = React.useState(new Date().toISOString().slice(0,10))
+  const [filter, setFilter] = React.useState('all')
+
+  async function load() {
+    setLoading(true)
+    const d = await fetch(`/api/accounting/stock-reconciliation?from=${from}&to=${to}`).then(r=>r.json()).catch(()=>[])
+    setData(Array.isArray(d)?d:[]); setLoading(false)
+  }
+  React.useEffect(()=>{ load() },[])
+
+  function doExcel() {
+    if (!data) return
+    exportToExcel(data, `сверка_склада_${from}_${to}`, [
+      {key:'name',label:'Товар'},{key:'unit',label:'Ед.'},{key:'expectedConsumption',label:'Ожидаемое списание'},{key:'actualWriteoff',label:'Фактическое списание'},{key:'diff',label:'Расхождение'},{key:'currentStock',label:'Остаток на складе'}
+    ])
+  }
+
+  const filtered = (data||[]).filter(i => {
+    if (filter==='issues') return Math.abs(i.diff) > 0.01
+    if (filter==='ok') return Math.abs(i.diff) <= 0.01
+    return true
+  })
+
+  const issues = (data||[]).filter(i=>Math.abs(i.diff)>0.01).length
+
+  return (
+    <div style={{padding:24}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:700,color:'#1a1a2e'}}>Сверка склада с продажами</div>
+          {issues>0 && <div style={{fontSize:13,color:'#e74c3c',marginTop:4}}>⚠ Расхождений: {issues}</div>}
+        </div>
+        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+          <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{border:'1.5px solid #e8e8e8',borderRadius:8,padding:'7px 10px',fontSize:13,fontFamily:'inherit'}}/>
+          <span style={{color:'#aaa'}}>—</span>
+          <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={{border:'1.5px solid #e8e8e8',borderRadius:8,padding:'7px 10px',fontSize:13,fontFamily:'inherit'}}/>
+          <button onClick={load} style={{background:'#1a1a2e',color:'#fff',border:'none',borderRadius:8,padding:'7px 16px',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Показать</button>
+          {data && <ExcelBtn onClick={doExcel}/>}
+        </div>
+      </div>
+      <div style={{display:'flex',gap:8,marginBottom:16}}>
+        {[['all','Все'],['issues','Расхождения'],['ok','Без расхождений']].map(([k,l])=>(
+          <button key={k} onClick={()=>setFilter(k)} style={{background:filter===k?'#1a1a2e':'#f5f5f5',color:filter===k?'#fff':'#555',border:'none',borderRadius:7,padding:'6px 14px',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>{l}</button>
+        ))}
+      </div>
+      {loading && <div style={{textAlign:'center',padding:40,color:'#aaa'}}>Загрузка...</div>}
+      {!loading && data && (
+        <div style={cardSt}>
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
+            <thead><tr>
+              <th style={thSt2}>Товар</th>
+              <th style={{...thSt2,textAlign:'right'}}>Ожид. списание</th>
+              <th style={{...thSt2,textAlign:'right'}}>Факт. списание</th>
+              <th style={{...thSt2,textAlign:'right'}}>Расхождение</th>
+              <th style={{...thSt2,textAlign:'right'}}>Остаток</th>
+              <th style={thSt2}>Статус</th>
+            </tr></thead>
+            <tbody>{filtered.map(i=>{
+              const hasDiff = Math.abs(i.diff) > 0.01
+              return (
+                <tr key={i.id} style={{background:hasDiff?'#fff8f8':'transparent'}}>
+                  <td style={tdSt2}><b>{i.name}</b> <span style={{color:'#aaa',fontSize:11}}>{i.unit}</span></td>
+                  <td style={{...tdSt2,textAlign:'right'}}>{fmt(i.expectedConsumption)}</td>
+                  <td style={{...tdSt2,textAlign:'right'}}>{fmt(i.actualWriteoff)}</td>
+                  <td style={{...tdSt2,textAlign:'right',fontWeight:700,color:hasDiff?(i.diff>0?'#e74c3c':'#e67e22'):'#27ae60'}}>
+                    {i.diff>0?'+':''}{fmt(i.diff)}
+                  </td>
+                  <td style={{...tdSt2,textAlign:'right'}}>{fmt(i.currentStock)}</td>
+                  <td style={tdSt2}>
+                    {!hasDiff && <span style={{background:'#eafaf1',color:'#27ae60',padding:'2px 8px',borderRadius:6,fontSize:11,fontWeight:600}}>OK</span>}
+                    {hasDiff && i.diff>0 && <span style={{background:'#fdf2f2',color:'#e74c3c',padding:'2px 8px',borderRadius:6,fontSize:11,fontWeight:600}}>Перерасход</span>}
+                    {hasDiff && i.diff<0 && <span style={{background:'#fff8ec',color:'#e67e22',padding:'2px 8px',borderRadius:6,fontSize:11,fontWeight:600}}>Недосписание</span>}
+                  </td>
+                </tr>
+              )
+            })}</tbody>
+          </table>
+          {filtered.length===0 && <div style={{textAlign:'center',padding:30,color:'#aaa'}}>Нет данных</div>}
         </div>
       )}
     </div>

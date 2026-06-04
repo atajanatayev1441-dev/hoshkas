@@ -1590,6 +1590,218 @@ app.post('/api/warehouses', async (req, res) => {
   catch(e) { res.status(500).json({ error: e.message }) }
 })
 
+// ─── КАССОВАЯ КНИГА ──────────────────────────────────────────
+app.get('/api/cashbook', async (req, res) => {
+  try {
+    const { from, to } = req.query
+    const where = {}
+    if (from || to) {
+      where.date = {}
+      if (from) where.date.gte = new Date(from)
+      if (to) { const t = new Date(to); t.setDate(t.getDate()+1); where.date.lt = t }
+    }
+    // Приходы: оплаченные заказы наличными
+    const fromD = from ? new Date(from) : new Date(Date.now() - 30*86400000)
+    const toD = to ? new Date(to) : new Date()
+    toD.setDate(toD.getDate()+1)
+
+    const orders = await prisma.order.findMany({
+      where: { status: 'PAID', paymentType: 'CASH', createdAt: { gte: fromD, lt: toD } },
+      orderBy: { createdAt: 'asc' }
+    })
+    const expenses = await prisma.expense.findMany({
+      where: { date: { gte: fromD, lt: toD } },
+      orderBy: { date: 'asc' }
+    })
+    const shifts = await prisma.shift.findMany({
+      where: { openedAt: { gte: fromD, lt: toD } },
+      orderBy: { openedAt: 'asc' }
+    })
+
+    // Группируем по дням
+    const days = {}
+    const addDay = (d, type, amount, desc, ref) => {
+      const key = new Date(d).toISOString().slice(0,10)
+      if (!days[key]) days[key] = { date: key, entries: [], openBalance: 0, closeBalance: 0 }
+      days[key].entries.push({ type, amount, desc, ref, time: d })
+    }
+    orders.forEach(o => addDay(o.createdAt, 'IN', o.total, `Чек #${o.orderNumber||o.id} (наличные)`, o.id))
+    expenses.forEach(e => addDay(e.date, 'OUT', e.amount, e.description || e.category, e.id))
+
+    // Считаем остатки
+    const sortedDays = Object.values(days).sort((a,b) => a.date.localeCompare(b.date))
+    let balance = 0
+    const openingShift = shifts[0]
+    if (openingShift) balance = openingShift.openCash || 0
+
+    sortedDays.forEach(day => {
+      day.openBalance = balance
+      const inn = day.entries.filter(e=>e.type==='IN').reduce((s,e)=>s+e.amount,0)
+      const out = day.entries.filter(e=>e.type==='OUT').reduce((s,e)=>s+e.amount,0)
+      balance += inn - out
+      day.closeBalance = balance
+      day.totalIn = inn
+      day.totalOut = out
+    })
+
+    res.json({ days: sortedDays, currentBalance: balance })
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── Z-ОТЧЁТ ──────────────────────────────────────────────────
+app.get('/api/shifts/:id/zreport', async (req, res) => {
+  try {
+    const shift = await prisma.shift.findUnique({ where: { id: Number(req.params.id) } })
+    if (!shift) return res.status(404).json({ error: 'Смена не найдена' })
+    const orders = await prisma.order.findMany({
+      where: { status: 'PAID', createdAt: { gte: shift.openedAt, ...(shift.closedAt ? { lte: shift.closedAt } : {}) } },
+      include: { items: { include: { item: true } } }
+    })
+    const expenses = await prisma.expense.findMany({
+      where: { date: { gte: shift.openedAt, ...(shift.closedAt ? { lte: shift.closedAt } : {}) } }
+    })
+    const cashOrders = orders.filter(o=>o.paymentType==='CASH')
+    const cardOrders = orders.filter(o=>o.paymentType==='CARD')
+    const totalCash = cashOrders.reduce((s,o)=>s+o.total,0)
+    const totalCard = cardOrders.reduce((s,o)=>s+o.total,0)
+    const totalExpenses = expenses.reduce((s,e)=>s+e.amount,0)
+    const avgCheck = orders.length ? (totalCash+totalCard)/orders.length : 0
+
+    // Топ блюд
+    const itemMap = {}
+    orders.forEach(o => (o.items||[]).forEach(i => {
+      if (!itemMap[i.name]) itemMap[i.name] = { name: i.name, qty: 0, total: 0 }
+      itemMap[i.name].qty += i.quantity||1
+      itemMap[i.name].total += (i.price||0)*(i.quantity||1)
+    }))
+    const topItems = Object.values(itemMap).sort((a,b)=>b.total-a.total).slice(0,10)
+
+    // По категориям
+    const catMap = {}
+    orders.forEach(o => (o.items||[]).forEach(i => {
+      const cat = i.item?.category || 'Прочее'
+      if (!catMap[cat]) catMap[cat] = { name: cat, qty: 0, total: 0 }
+      catMap[cat].qty += i.quantity||1
+      catMap[cat].total += (i.price||0)*(i.quantity||1)
+    }))
+
+    res.json({
+      shift, orders: orders.length, cashOrders: cashOrders.length, cardOrders: cardOrders.length,
+      totalCash, totalCard, totalRevenue: totalCash+totalCard,
+      totalExpenses, profit: totalCash+totalCard-totalExpenses, avgCheck,
+      topItems, categories: Object.values(catMap), expenses
+    })
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+app.get('/api/shifts', async (req, res) => {
+  try {
+    const { limit=20, offset=0 } = req.query
+    const shifts = await prisma.shift.findMany({
+      orderBy: { openedAt: 'desc' },
+      take: Number(limit), skip: Number(offset)
+    })
+    res.json(shifts)
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── СЕБЕСТОИМОСТЬ И МАРЖА ─────────────────────────────────────
+app.get('/api/accounting/margin', async (req, res) => {
+  try {
+    const { from, to } = req.query
+    const where = { status: 'PAID' }
+    if (from || to) {
+      where.createdAt = {}
+      if (from) where.createdAt.gte = new Date(from)
+      if (to) { const t = new Date(to); t.setDate(t.getDate()+1); where.createdAt.lt = t }
+    }
+    const orders = await prisma.order.findMany({ where, include: { items: { include: { item: true } } } })
+    const recipes = await prisma.recipe.findMany({ include: { ingredients: { include: { stockProduct: true } } } })
+    const recipeMap = {}
+    recipes.forEach(r => { recipeMap[r.itemId] = r })
+
+    const itemStats = {}
+    orders.forEach(o => (o.items||[]).forEach(oi => {
+      const key = oi.itemId || oi.name
+      if (!itemStats[key]) itemStats[key] = { name: oi.item?.name||oi.name, qty: 0, revenue: 0, cost: 0, itemId: oi.itemId }
+      itemStats[key].qty += oi.quantity||1
+      itemStats[key].revenue += (oi.price||0)*(oi.quantity||1)
+      // Себестоимость из рецептуры
+      const recipe = oi.itemId ? recipeMap[oi.itemId] : null
+      if (recipe) {
+        const costPerUnit = recipe.ingredients.reduce((s,ing) => s + (ing.quantity * (ing.stockProduct?.lastPrice||0)), 0)
+        itemStats[key].cost += costPerUnit * (oi.quantity||1)
+      }
+    }))
+
+    const items = Object.values(itemStats).map(i => ({
+      ...i,
+      margin: i.revenue - i.cost,
+      marginPct: i.revenue > 0 ? ((i.revenue - i.cost) / i.revenue * 100) : 0,
+      avgPrice: i.qty > 0 ? i.revenue/i.qty : 0,
+      avgCost: i.qty > 0 ? i.cost/i.qty : 0,
+    })).sort((a,b) => b.revenue - a.revenue)
+
+    const totalRevenue = items.reduce((s,i)=>s+i.revenue,0)
+    const totalCost = items.reduce((s,i)=>s+i.cost,0)
+    res.json({ items, totalRevenue, totalCost, totalMargin: totalRevenue-totalCost, marginPct: totalRevenue>0?(totalRevenue-totalCost)/totalRevenue*100:0 })
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// ─── СВЕРКА СКЛАДА С ПРОДАЖАМИ ─────────────────────────────────
+app.get('/api/accounting/stock-reconciliation', async (req, res) => {
+  try {
+    const { from, to } = req.query
+    const where = { status: 'PAID' }
+    if (from || to) {
+      where.createdAt = {}
+      if (from) where.createdAt.gte = new Date(from)
+      if (to) { const t = new Date(to); t.setDate(t.getDate()+1); where.createdAt.lt = t }
+    }
+    const orders = await prisma.order.findMany({ where, include: { items: true } })
+    const recipes = await prisma.recipe.findMany({ include: { ingredients: { include: { stockProduct: true } } } })
+    const stockProducts = await prisma.stockProduct.findMany()
+    const recipeMap = {}
+    recipes.forEach(r => { recipeMap[r.itemId] = r })
+
+    // Сколько должно было списаться по рецептурам
+    const expectedConsumption = {}
+    orders.forEach(o => (o.items||[]).forEach(oi => {
+      const recipe = oi.itemId ? recipeMap[oi.itemId] : null
+      if (recipe) {
+        recipe.ingredients.forEach(ing => {
+          const pid = ing.stockProductId
+          if (!expectedConsumption[pid]) expectedConsumption[pid] = { productId: pid, name: ing.stockProduct?.name||'', expected: 0, unit: ing.stockProduct?.unit||'' }
+          expectedConsumption[pid].expected += ing.quantity * (oi.quantity||1)
+        })
+      }
+    }))
+
+    // Реальные списания со склада
+    const writeoffs = await prisma.stockWriteOff.findMany({
+      where: from || to ? { createdAt: where.createdAt } : {},
+      include: { items: { include: { product: true } } }
+    })
+    const actualWriteoffs = {}
+    writeoffs.forEach(w => (w.items||[]).forEach(wi => {
+      const pid = wi.stockProductId||wi.productId
+      if (!actualWriteoffs[pid]) actualWriteoffs[pid] = 0
+      actualWriteoffs[pid] += wi.quantity||0
+    }))
+
+    const reconciliation = stockProducts.map(p => ({
+      id: p.id, name: p.name, unit: p.unit,
+      currentStock: p.quantity||0,
+      expectedConsumption: expectedConsumption[p.id]?.expected || 0,
+      actualWriteoff: actualWriteoffs[p.id] || 0,
+      diff: (actualWriteoffs[p.id]||0) - (expectedConsumption[p.id]?.expected||0),
+      lastPrice: p.lastPrice||0,
+    })).filter(p => p.expectedConsumption > 0 || p.actualWriteoff > 0 || p.currentStock > 0)
+
+    res.json(reconciliation)
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
 // ─── RESET DATABASE ───────────────────────────────────────────
 app.post('/api/admin/reset', async (req, res) => {
   try {
