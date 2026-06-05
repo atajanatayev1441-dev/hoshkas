@@ -13,7 +13,7 @@ function getServerPath() {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, 'server')
   }
-  return path.join(__dirname, '..', 'server')
+  return __dirname
 }
 
 // Путь к node
@@ -50,17 +50,22 @@ function waitForServer(maxAttempts = 30) {
 function startServer() {
   return new Promise((resolve, reject) => {
     const serverPath = getServerPath()
+    const dbPath = path.join(app.getPath('userData'), 'hoslounge.db')
+    const publicPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'public')
+      : path.join(__dirname, '..', 'public')
     const env = {
       ...process.env,
       PORT: SERVER_PORT,
       NODE_ENV: 'production',
-      DATABASE_URL: `file:${path.join(app.getPath('userData'), 'hoslounge.db')}`,
+      DB_PATH: dbPath,
+      PUBLIC_PATH: publicPath,
     }
 
     console.log('Starting server at:', serverPath)
 
     // Запускаем сервер
-    serverProcess = spawn('node', ['index.js'], {
+    serverProcess = spawn('node', ['server-sqlite.js'], {
       cwd: serverPath,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],

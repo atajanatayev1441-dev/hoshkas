@@ -12,15 +12,14 @@
     "build:client": "cd ../client && npm install && npm run build"
   },
   "dependencies": {
-    "@prisma/client": "5.22.0",
+    "better-sqlite3": "^9.4.3",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "ws": "^8.16.0"
   },
   "devDependencies": {
     "electron": "^29.4.6",
-    "electron-builder": "^24.13.3",
-    "prisma": "5.22.0"
+    "electron-builder": "^24.13.3"
   },
   "build": {
     "appId": "com.hoslounge.pos",
@@ -43,13 +42,8 @@
     ],
     "extraResources": [
       {
-        "from": "../server",
-        "to": "server",
-        "filter": [
-          "**/*",
-          "!node_modules/**",
-          "!.env"
-        ]
+        "from": "server-sqlite.js",
+        "to": "server/server-sqlite.js"
       },
       {
         "from": "../public",
