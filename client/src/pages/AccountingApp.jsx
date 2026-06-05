@@ -55,6 +55,7 @@ export default function AccountingApp({ onLogout }) {
     { key:'hist_rejected',    label:'История: Отказные' },
     { key:'staff',            label:'Отчёт по персоналу' },
     { key:'rejected',         label:'Отказные чеки' },
+    { key:'findynamics',     label:'Финдинамика' },
     { key:'dynamics',         label:'Динамика по месяцам' },
     { key:'pricecontrol',     label:'Контроль цен' },
     { key:'expenses',         label:'Расходы' },
@@ -102,6 +103,7 @@ export default function AccountingApp({ onLogout }) {
         {tab==='hist_rejected'   && <HistRejected />}
         {tab==='staff'           && <StaffReport />}
         {tab==='rejected'        && <RejectedReport />}
+        {tab==='findynamics'    && <FinancialDynamics />}
         {tab==='dynamics'        && <MonthlyDynamics />}
         {tab==='pricecontrol'    && <PriceControl />}
         {tab==='expenses'        && <Expenses />}
@@ -163,6 +165,12 @@ function Dashboard() {
           {[['Сегодня',today(),today()],['Неделя',new Date(Date.now()-6*86400000).toISOString().slice(0,10),today()],['Месяц',monthStart(),today()]].map(([l,f,t])=>(
             <button key={l} onClick={()=>{setFrom(f);setTo(t)}} style={{border:'1.5px solid #e8e8e8',background:'#fff',borderRadius:20,padding:'5px 14px',fontSize:12,cursor:'pointer',fontFamily:'inherit',color:'#555'}}>{l}</button>
           ))}
+          <button onClick={async()=>{
+            const r=await fetch('/api/accounting/recalculate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from,to})})
+            const d=await r.json(); if(d.ok){alert(`Пересчитано: ${d.processed} дней`); load()}
+          }} style={{border:'1.5px solid #c9a96e',background:'#fdf8f0',borderRadius:20,padding:'5px 14px',fontSize:12,cursor:'pointer',fontFamily:'inherit',color:'#c9a96e',fontWeight:600}}>
+            ↻ Пересчитать
+          </button>
           <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{...inputSt}} />
           <span style={{color:'#aaa'}}>—</span>
           <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={{...inputSt}} />
@@ -1824,6 +1832,217 @@ function HistRejected() {
         </table>
         {filtered.length === 0 && <div style={{textAlign:'center',padding:30,color:'#aaa'}}>Нет данных</div>}
       </div>
+    </div>
+  )
+}
+
+// ─── ФИНАНСОВАЯ ДИНАМИКА (из DailySummary) ───────────────────
+function FinancialDynamics() {
+  const [data, setData] = React.useState([])
+  const [loading, setLoading] = React.useState(false)
+  const [from, setFrom] = React.useState(new Date(Date.now()-30*86400000).toISOString().slice(0,10))
+  const [to, setTo] = React.useState(new Date().toISOString().slice(0,10))
+  const [recalcLoading, setRecalcLoading] = React.useState(false)
+  const [view, setView] = React.useState('chart') // 'chart' | 'table'
+
+  async function load() {
+    setLoading(true)
+    const d = await fetch(`/api/accounting/daily-summary?from=${from}&to=${to}`).then(r=>r.json()).catch(()=>[])
+    setData(Array.isArray(d) ? d : [])
+    setLoading(false)
+  }
+
+  async function recalculate() {
+    setRecalcLoading(true)
+    const r = await fetch('/api/accounting/recalculate', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ from, to })
+    })
+    const d = await r.json()
+    if (d.ok) { await load(); alert(`Пересчитано: ${d.processed} дней`) }
+    setRecalcLoading(false)
+  }
+
+  React.useEffect(() => { load() }, [])
+
+  const totalRevenue = data.reduce((s,d) => s+d.revenue, 0)
+  const totalCost = data.reduce((s,d) => s+d.costOfGoods, 0)
+  const totalExpenses = data.reduce((s,d) => s+d.expenses, 0)
+  const totalGross = data.reduce((s,d) => s+d.grossProfit, 0)
+  const totalNet = data.reduce((s,d) => s+d.netProfit, 0)
+  const totalOrders = data.reduce((s,d) => s+d.ordersCount, 0)
+  const avgCheck = totalOrders ? totalRevenue/totalOrders : 0
+  const grossMarginPct = totalRevenue ? (totalGross/totalRevenue)*100 : 0
+  const netMarginPct = totalRevenue ? (totalNet/totalRevenue)*100 : 0
+
+  const maxRev = Math.max(...data.map(d => d.revenue), 1)
+
+  function doExcel() {
+    exportToExcel(data.map(d => ({
+      date: fmtDate(d.date),
+      revenue: fmt(d.revenue),
+      cash: fmt(d.revenueCash),
+      card: fmt(d.revenueCard),
+      orders: d.ordersCount,
+      avgCheck: fmt(d.avgCheck),
+      cost: fmt(d.costOfGoods),
+      gross: fmt(d.grossProfit),
+      expenses: fmt(d.expenses),
+      net: fmt(d.netProfit),
+    })), `финдинамика_${from}_${to}`, [
+      {key:'date',label:'Дата'},
+      {key:'revenue',label:'Выручка'},
+      {key:'cash',label:'Наличные'},
+      {key:'card',label:'Карта'},
+      {key:'orders',label:'Чеков'},
+      {key:'avgCheck',label:'Ср. чек'},
+      {key:'cost',label:'Себестоимость'},
+      {key:'gross',label:'Валовая прибыль'},
+      {key:'expenses',label:'Расходы'},
+      {key:'net',label:'Чистая прибыль'},
+    ])
+  }
+
+  return (
+    <div style={{padding:24}}>
+      {/* Заголовок */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:700,color:'#1a1a2e'}}>Финансовая динамика</div>
+          <div style={{fontSize:12,color:'#aaa',marginTop:3}}>Реальные данные из всех операций — обновляется автоматически</div>
+        </div>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+          <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{border:'1.5px solid #e8e8e8',borderRadius:8,padding:'7px 10px',fontSize:13,fontFamily:'inherit'}}/>
+          <span style={{color:'#aaa'}}>—</span>
+          <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={{border:'1.5px solid #e8e8e8',borderRadius:8,padding:'7px 10px',fontSize:13,fontFamily:'inherit'}}/>
+          <button onClick={load} style={{background:'#1a1a2e',color:'#fff',border:'none',borderRadius:8,padding:'7px 14px',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Показать</button>
+          <button onClick={recalculate} disabled={recalcLoading} style={{background:'#fdf8f0',color:'#c9a96e',border:'1.5px solid #c9a96e',borderRadius:8,padding:'7px 14px',fontSize:13,cursor:'pointer',fontFamily:'inherit',fontWeight:600}}>
+            {recalcLoading ? '...' : '↻ Пересчитать'}
+          </button>
+          {data.length > 0 && <ExcelBtn onClick={doExcel}/>}
+        </div>
+      </div>
+
+      {/* Сводные карточки */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:12,marginBottom:20}}>
+        {[
+          {l:'Выручка',v:`${fmt(totalRevenue)} TMT`,c:'#27ae60',sub:`${totalOrders} чеков`},
+          {l:'Себестоимость',v:`${fmt(totalCost)} TMT`,c:'#e74c3c',sub:`${fmt(totalRevenue?totalCost/totalRevenue*100:0)}% от выручки`},
+          {l:'Валовая прибыль',v:`${fmt(totalGross)} TMT`,c:'#2980b9',sub:`${fmt(grossMarginPct)}% маржа`},
+          {l:'Расходы',v:`${fmt(totalExpenses)} TMT`,c:'#e67e22',sub:'операционные'},
+          {l:'Чистая прибыль',v:`${fmt(totalNet)} TMT`,c:totalNet>=0?'#27ae60':'#e74c3c',sub:`${fmt(netMarginPct)}% маржа`},
+          {l:'Средний чек',v:`${fmt(avgCheck)} TMT`,c:'#8e44ad',sub:`${data.length} дней`},
+        ].map(c => (
+          <div key={c.l} style={cardSt}>
+            <div style={{fontSize:10,color:'#aaa',fontWeight:700,textTransform:'uppercase',letterSpacing:0.5,marginBottom:4}}>{c.l}</div>
+            <div style={{fontSize:18,fontWeight:800,color:c.c,marginBottom:2}}>{c.v}</div>
+            <div style={{fontSize:11,color:'#aaa'}}>{c.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {loading && <div style={{textAlign:'center',padding:40,color:'#aaa'}}>Загрузка...</div>}
+
+      {!loading && data.length === 0 && (
+        <div style={{...cardSt,textAlign:'center',padding:40,color:'#aaa'}}>
+          <div style={{fontSize:16,marginBottom:8}}>Нет данных за период</div>
+          <div style={{fontSize:13}}>Нажмите "Пересчитать" чтобы заполнить из существующих заказов</div>
+        </div>
+      )}
+
+      {!loading && data.length > 0 && (
+        <>
+          {/* Переключатель вид */}
+          <div style={{display:'flex',gap:8,marginBottom:14}}>
+            {[['chart','График'],['table','Таблица']].map(([k,l]) => (
+              <button key={k} onClick={() => setView(k)}
+                style={{background:view===k?'#1a1a2e':'#f5f5f5',color:view===k?'#fff':'#555',border:'none',borderRadius:7,padding:'6px 14px',fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>
+                {l}
+              </button>
+            ))}
+          </div>
+
+          {/* ГРАФИК */}
+          {view === 'chart' && (
+            <div style={cardSt}>
+              <div style={{fontWeight:700,fontSize:14,color:'#1a1a2e',marginBottom:16}}>Выручка и прибыль по дням</div>
+              <div style={{overflowX:'auto'}}>
+                <div style={{display:'flex',alignItems:'flex-end',gap:3,height:140,minWidth:Math.max(data.length*28,400)}}>
+                  {data.map((d,i) => {
+                    const revH = Math.max(4, (d.revenue/maxRev)*120)
+                    const netH = d.netProfit > 0 ? Math.max(2,(d.netProfit/maxRev)*120) : 0
+                    return (
+                      <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2,minWidth:20}}>
+                        <div style={{width:'100%',display:'flex',gap:1,alignItems:'flex-end',height:120}}>
+                          <div title={`Выручка: ${fmt(d.revenue)} TMT`} style={{flex:1,height:revH,background:'#c9a96e',borderRadius:'3px 3px 0 0',opacity:0.9}}/>
+                          <div title={`Прибыль: ${fmt(d.netProfit)} TMT`} style={{flex:1,height:netH,background:d.netProfit>=0?'#27ae60':'#e74c3c',borderRadius:'3px 3px 0 0',opacity:0.9}}/>
+                        </div>
+                        <div style={{fontSize:9,color:'#aaa',textAlign:'center',whiteSpace:'nowrap'}}>
+                          {new Date(d.date).toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit'})}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+              <div style={{display:'flex',gap:16,marginTop:10,fontSize:12,color:'#888'}}>
+                <span><span style={{display:'inline-block',width:10,height:10,background:'#c9a96e',borderRadius:2,marginRight:4}}/>Выручка</span>
+                <span><span style={{display:'inline-block',width:10,height:10,background:'#27ae60',borderRadius:2,marginRight:4}}/>Прибыль</span>
+              </div>
+            </div>
+          )}
+
+          {/* ТАБЛИЦА */}
+          {view === 'table' && (
+            <div style={cardSt}>
+              <table style={{width:'100%',borderCollapse:'collapse'}}>
+                <thead><tr>
+                  <th style={thSt2}>Дата</th>
+                  <th style={{...thSt2,textAlign:'right'}}>Выручка</th>
+                  <th style={{...thSt2,textAlign:'right'}}>Наличные</th>
+                  <th style={{...thSt2,textAlign:'right'}}>Карта</th>
+                  <th style={{...thSt2,textAlign:'right'}}>Чеков</th>
+                  <th style={{...thSt2,textAlign:'right'}}>Ср. чек</th>
+                  <th style={{...thSt2,textAlign:'right'}}>Себест.</th>
+                  <th style={{...thSt2,textAlign:'right'}}>Вал. прибыль</th>
+                  <th style={{...thSt2,textAlign:'right'}}>Расходы</th>
+                  <th style={{...thSt2,textAlign:'right'}}>Чист. прибыль</th>
+                </tr></thead>
+                <tbody>
+                  {data.map((d,i) => (
+                    <tr key={i} style={{background:i%2===0?'transparent':'#fafafa'}}>
+                      <td style={{...tdSt2,fontWeight:600}}>{fmtDate(d.date)}</td>
+                      <td style={{...tdSt2,textAlign:'right',fontWeight:700,color:'#27ae60'}}>{fmt(d.revenue)}</td>
+                      <td style={{...tdSt2,textAlign:'right'}}>{fmt(d.revenueCash)}</td>
+                      <td style={{...tdSt2,textAlign:'right'}}>{fmt(d.revenueCard)}</td>
+                      <td style={{...tdSt2,textAlign:'right'}}>{d.ordersCount}</td>
+                      <td style={{...tdSt2,textAlign:'right'}}>{fmt(d.avgCheck)}</td>
+                      <td style={{...tdSt2,textAlign:'right',color:'#e74c3c'}}>{fmt(d.costOfGoods)}</td>
+                      <td style={{...tdSt2,textAlign:'right',color:'#2980b9'}}>{fmt(d.grossProfit)}</td>
+                      <td style={{...tdSt2,textAlign:'right',color:'#e67e22'}}>{fmt(d.expenses)}</td>
+                      <td style={{...tdSt2,textAlign:'right',fontWeight:700,color:d.netProfit>=0?'#27ae60':'#e74c3c'}}>{fmt(d.netProfit)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{background:'#f8f9fa',borderTop:'2px solid #e8e8e8'}}>
+                    <td style={{...tdSt2,fontWeight:800}}>ИТОГО</td>
+                    <td style={{...tdSt2,textAlign:'right',fontWeight:800,color:'#27ae60'}}>{fmt(totalRevenue)}</td>
+                    <td style={{...tdSt2,textAlign:'right',fontWeight:700}}>{fmt(data.reduce((s,d)=>s+d.revenueCash,0))}</td>
+                    <td style={{...tdSt2,textAlign:'right',fontWeight:700}}>{fmt(data.reduce((s,d)=>s+d.revenueCard,0))}</td>
+                    <td style={{...tdSt2,textAlign:'right',fontWeight:700}}>{totalOrders}</td>
+                    <td style={{...tdSt2,textAlign:'right',fontWeight:700}}>{fmt(avgCheck)}</td>
+                    <td style={{...tdSt2,textAlign:'right',fontWeight:700,color:'#e74c3c'}}>{fmt(totalCost)}</td>
+                    <td style={{...tdSt2,textAlign:'right',fontWeight:700,color:'#2980b9'}}>{fmt(totalGross)}</td>
+                    <td style={{...tdSt2,textAlign:'right',fontWeight:700,color:'#e67e22'}}>{fmt(totalExpenses)}</td>
+                    <td style={{...tdSt2,textAlign:'right',fontWeight:800,color:totalNet>=0?'#27ae60':'#e74c3c'}}>{fmt(totalNet)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

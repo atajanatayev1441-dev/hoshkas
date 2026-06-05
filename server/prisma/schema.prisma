@@ -158,6 +158,7 @@ model StockProduct {
   transferItems  StockTransferItem[]
   writeoffItems  StockWriteoffItem[]
   inventoryItems InventoryItem[]
+  autoWriteoffs  AutoWriteoff[]
   createdAt      DateTime           @default(now())
 }
 
@@ -396,4 +397,33 @@ model User {
   role      UserRole
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
+}
+
+// ─── ФИНАНСОВЫЙ УЧЁТ ─────────────────────────────────────────
+// Ежедневные сводки для динамики и дашборда
+model DailySummary {
+  id            Int      @id @default(autoincrement())
+  date          DateTime @unique
+  revenue       Float    @default(0)
+  revenueCash   Float    @default(0)
+  revenueCard   Float    @default(0)
+  ordersCount   Int      @default(0)
+  avgCheck      Float    @default(0)
+  costOfGoods   Float    @default(0)  // себестоимость проданного
+  grossProfit   Float    @default(0)  // выручка - себестоимость
+  expenses      Float    @default(0)  // расходы за день
+  netProfit     Float    @default(0)  // валовая - расходы
+  updatedAt     DateTime @updatedAt
+}
+
+// Автоматическое списание ингредиентов при продаже
+model AutoWriteoff {
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  productId   Int
+  product     StockProduct @relation(fields: [productId], references: [id])
+  quantity    Float
+  costPrice   Float
+  totalCost   Float
+  createdAt   DateTime @default(now())
 }

@@ -272,7 +272,7 @@ app.put('/api/orders/:id/accept', async (req, res) => {
       include: { items: true, waiter: true }
     })
     broadcast('order_accepted', order)
-    // Auto-sync: update shift totals if shift is open
+    // Синхронизация смены
     try {
       const shift = await prisma.shift.findFirst({ where: { status: 'OPEN' }, orderBy: { openedAt: 'desc' } })
       if (shift) {
@@ -287,6 +287,8 @@ app.put('/api/orders/:id/accept', async (req, res) => {
         })
       }
     } catch(e) { console.error('Shift sync error:', e.message) }
+    // Бухгалтерский учёт: списание склада, себестоимость, дневная сводка
+    processOrderAccounting(order).catch(e => console.error('Accounting error:', e.message))
     res.json(order)
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
@@ -305,6 +307,8 @@ app.post('/api/orders/direct', async (req, res) => {
       },
       include: { items: true }
     })
+    // Бухгалтерский учёт: списание склада, себестоимость, дневная сводка
+    processOrderAccounting(order).catch(e => console.error('Accounting error:', e.message))
     res.json(order)
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
@@ -500,7 +504,28 @@ app.get('/api/expenses', async (req, res) => {
 app.post('/api/expenses', async (req, res) => {
   try {
     const { amount, category, description, date } = req.body
-    res.json(await prisma.expense.create({ data: { amount: parseFloat(amount), category, description, date: date ? new Date(date) : new Date() } }))
+    const expense = await prisma.expense.create({ data: { amount: parseFloat(amount), category, description, date: date ? new Date(date) : new Date() } })
+    // Синхронизируем дневную сводку
+    try {
+      const expDate = date ? new Date(date) : new Date()
+      const dayStart = new Date(expDate); dayStart.setHours(0,0,0,0)
+      const dayEnd = new Date(expDate); dayEnd.setHours(23,59,59,999)
+      const [dayOrders, dayExpenses, dayWriteoffs] = await Promise.all([
+        prisma.order.findMany({ where: { status: 'PAID', closedAt: { gte: dayStart, lte: dayEnd } } }),
+        prisma.expense.findMany({ where: { date: { gte: dayStart, lte: dayEnd } } }),
+        prisma.autoWriteoff.findMany({ where: { createdAt: { gte: dayStart, lte: dayEnd } } }),
+      ])
+      const revenue = dayOrders.reduce((s,o)=>s+o.total,0)
+      const expenses = dayExpenses.reduce((s,e)=>s+e.amount,0)
+      const dayCost = dayWriteoffs.reduce((s,w)=>s+w.totalCost,0)
+      const grossProfit = revenue - dayCost
+      await prisma.dailySummary.upsert({
+        where: { date: dayStart },
+        create: { date: dayStart, revenue, revenueCash: dayOrders.filter(o=>o.paymentType==='CASH').reduce((s,o)=>s+o.total,0), revenueCard: dayOrders.filter(o=>o.paymentType==='CARD').reduce((s,o)=>s+o.total,0), ordersCount: dayOrders.length, avgCheck: dayOrders.length ? revenue/dayOrders.length : 0, costOfGoods: dayCost, grossProfit, expenses, netProfit: grossProfit-expenses },
+        update: { expenses, netProfit: grossProfit-expenses }
+      })
+    } catch(e) { console.error('Expense sync error:', e.message) }
+    res.json(expense)
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
@@ -982,6 +1007,106 @@ app.get('/api/manager/waiter-stats', async (req, res) => {
 })
 
 // ─── ИСТОРИЧЕСКИЕ ДАННЫЕ ATLANT ───────────────────────────────
+
+// ─── ЦЕНТРАЛЬНЫЙ БУХГАЛТЕРСКИЙ УЧЁТ ──────────────────────────
+// Вызывается при каждой оплате заказа — синхронизирует всё
+async function processOrderAccounting(order) {
+  try {
+    const orderDate = new Date(order.closedAt || order.createdAt)
+    const dayStart = new Date(orderDate); dayStart.setHours(0,0,0,0)
+    const dayEnd = new Date(orderDate); dayEnd.setHours(23,59,59,999)
+
+    // 1. Списание ингредиентов по рецептурам
+    for (const item of (order.items || [])) {
+      const recipe = await prisma.recipe.findUnique({
+        where: { itemId: item.itemId },
+        include: { ingredients: { include: { product: true } } }
+      })
+      if (!recipe) continue
+      for (const ing of recipe.ingredients) {
+        const qty = ing.quantity * item.quantity
+        const cost = (ing.product.costPrice || 0) * qty
+        await prisma.stockProduct.update({ where: { id: ing.productId }, data: { currentStock: { decrement: qty } } })
+        await prisma.autoWriteoff.create({ data: { orderId: order.id, productId: ing.productId, quantity: qty, costPrice: ing.product.costPrice || 0, totalCost: cost } })
+      }
+    }
+
+    // 2. Обновляем DailySummary за этот день
+    const [dayOrders, dayExpenses, dayWriteoffs] = await Promise.all([
+      prisma.order.findMany({ where: { status: 'PAID', closedAt: { gte: dayStart, lte: dayEnd } } }),
+      prisma.expense.findMany({ where: { date: { gte: dayStart, lte: dayEnd } } }),
+      prisma.autoWriteoff.findMany({ where: { createdAt: { gte: dayStart, lte: dayEnd } } }),
+    ])
+    const revenue = dayOrders.reduce((s,o)=>s+o.total,0)
+    const revenueCash = dayOrders.filter(o=>o.paymentType==='CASH').reduce((s,o)=>s+o.total,0)
+    const revenueCard = dayOrders.filter(o=>o.paymentType==='CARD').reduce((s,o)=>s+o.total,0)
+    const ordersCount = dayOrders.length
+    const avgCheck = ordersCount ? revenue/ordersCount : 0
+    const expenses = dayExpenses.reduce((s,e)=>s+e.amount,0)
+    const dayCost = dayWriteoffs.reduce((s,w)=>s+w.totalCost,0)
+    const grossProfit = revenue - dayCost
+    const netProfit = grossProfit - expenses
+    await prisma.dailySummary.upsert({
+      where: { date: dayStart },
+      create: { date: dayStart, revenue, revenueCash, revenueCard, ordersCount, avgCheck, costOfGoods: dayCost, grossProfit, expenses, netProfit },
+      update: { revenue, revenueCash, revenueCard, ordersCount, avgCheck, costOfGoods: dayCost, grossProfit, expenses, netProfit }
+    })
+  } catch(e) { console.error('processOrderAccounting error:', e.message) }
+}
+
+// API: ежедневные сводки для дашборда бухгалтерии
+app.get('/api/accounting/daily-summary', async (req, res) => {
+  try {
+    const { from, to } = req.query
+    const where = {}
+    if (from || to) {
+      where.date = {}
+      if (from) where.date.gte = new Date(from)
+      if (to) { const t = new Date(to); t.setDate(t.getDate()+1); where.date.lt = t }
+    }
+    res.json(await prisma.dailySummary.findMany({ where, orderBy: { date: 'asc' } }))
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
+// API: пересчёт истории (запустить один раз или при ошибках)
+app.post('/api/accounting/recalculate', async (req, res) => {
+  try {
+    const { from, to } = req.body
+    const fromD = from ? new Date(from) : new Date(Date.now()-30*86400000)
+    const toD = to ? new Date(to) : new Date(); toD.setHours(23,59,59,999)
+    const orders = await prisma.order.findMany({
+      where: { status: 'PAID', closedAt: { gte: fromD, lte: toD } },
+      include: { items: true }
+    })
+    const days = {}
+    orders.forEach(o => {
+      const d = new Date(o.closedAt); d.setHours(0,0,0,0)
+      const key = d.toISOString()
+      if (!days[key]) days[key] = { date: d, orders: [] }
+      days[key].orders.push(o)
+    })
+    let processed = 0
+    for (const day of Object.values(days)) {
+      const dayEnd = new Date(day.date); dayEnd.setHours(23,59,59,999)
+      const revenue = day.orders.reduce((s,o)=>s+o.total,0)
+      const revenueCash = day.orders.filter(o=>o.paymentType==='CASH').reduce((s,o)=>s+o.total,0)
+      const revenueCard = day.orders.filter(o=>o.paymentType==='CARD').reduce((s,o)=>s+o.total,0)
+      const ordersCount = day.orders.length
+      const avgCheck = ordersCount ? revenue/ordersCount : 0
+      const expenses = (await prisma.expense.findMany({ where: { date: { gte: day.date, lte: dayEnd } } })).reduce((s,e)=>s+e.amount,0)
+      const writeoffs = (await prisma.autoWriteoff.findMany({ where: { createdAt: { gte: day.date, lte: dayEnd } } })).reduce((s,w)=>s+w.totalCost,0)
+      const grossProfit = revenue - writeoffs
+      await prisma.dailySummary.upsert({
+        where: { date: day.date },
+        create: { date: day.date, revenue, revenueCash, revenueCard, ordersCount, avgCheck, costOfGoods: writeoffs, grossProfit, expenses, netProfit: grossProfit-expenses },
+        update: { revenue, revenueCash, revenueCard, ordersCount, avgCheck, costOfGoods: writeoffs, grossProfit, expenses, netProfit: grossProfit-expenses }
+      })
+      processed++
+    }
+    res.json({ ok: true, processed })
+  } catch(e) { res.status(500).json({ error: e.message }) }
+})
+
 
 // Импорт исторических чеков
 app.post('/api/historical/import', async (req, res) => {
