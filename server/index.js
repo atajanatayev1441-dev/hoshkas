@@ -268,7 +268,7 @@ app.put('/api/orders/:id/accept', async (req, res) => {
   try {
     const order = await prisma.order.update({
       where: { id: Number(req.params.id) },
-      data: { status: 'PAID', paymentType: req.body.paymentType || 'CASH', closedAt: new Date() },
+      data: { status: 'PAID', paymentType: req.body.paymentType || 'CASH', closedAt: new Date(), ...(req.body.cashierName ? { cashierName: req.body.cashierName } : {}) },
       include: { items: true, waiter: true }
     })
     broadcast('order_accepted', order)
@@ -302,7 +302,7 @@ app.post('/api/orders/direct', async (req, res) => {
     const order = await prisma.order.create({
       data: {
         number, tableNumber, comment, total,
-        paymentType: paymentType || 'CASH', status: 'PAID', closedAt: new Date(),
+        paymentType: paymentType || 'CASH', status: 'PAID', closedAt: new Date(), cashierName: req.body.cashierName || '',
         items: { create: items.map(i => ({ itemId: i.itemId, quantity: i.quantity, price: i.price, name: i.name })) }
       },
       include: { items: true }
@@ -582,8 +582,32 @@ app.post('/api/expenses', async (req, res) => {
 })
 
 app.delete('/api/expenses/:id', async (req, res) => {
-  try { await prisma.expense.delete({ where: { id: Number(req.params.id) } }); res.json({ ok: true }) }
-  catch (e) { res.status(500).json({ error: e.message }) }
+  try {
+    const expense = await prisma.expense.findUnique({ where: { id: Number(req.params.id) } })
+    await prisma.expense.delete({ where: { id: Number(req.params.id) } })
+    // Пересчитываем сводку за день удалённого расхода
+    if (expense) {
+      const dayStart = new Date(expense.date); dayStart.setHours(0,0,0,0)
+      const dayEnd = new Date(expense.date); dayEnd.setHours(23,59,59,999)
+      const [dayOrders, dayExpenses, dayWriteoffs] = await Promise.all([
+        prisma.order.findMany({ where: { status: 'PAID', closedAt: { gte: dayStart, lte: dayEnd } } }),
+        prisma.expense.findMany({ where: { date: { gte: dayStart, lte: dayEnd } } }),
+        prisma.autoWriteoff.findMany({ where: { createdAt: { gte: dayStart, lte: dayEnd } } }),
+      ])
+      const revenue = dayOrders.reduce((s,o)=>s+o.total,0)
+      const expenses = dayExpenses.reduce((s,e)=>s+e.amount,0)
+      const dayCost = dayWriteoffs.reduce((s,w)=>s+w.totalCost,0)
+      const grossProfit = revenue - dayCost
+      if (revenue > 0 || expenses > 0) {
+        await prisma.dailySummary.upsert({
+          where: { date: dayStart },
+          create: { date: dayStart, revenue, revenueCash: dayOrders.filter(o=>o.paymentType==='CASH').reduce((s,o)=>s+o.total,0), revenueCard: dayOrders.filter(o=>o.paymentType==='CARD').reduce((s,o)=>s+o.total,0), ordersCount: dayOrders.length, avgCheck: dayOrders.length?revenue/dayOrders.length:0, costOfGoods: dayCost, grossProfit, expenses, netProfit: grossProfit-expenses },
+          update: { expenses, netProfit: grossProfit-expenses }
+        })
+      }
+    }
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 // ─── DEBTS ────────────────────────────────────────────────────

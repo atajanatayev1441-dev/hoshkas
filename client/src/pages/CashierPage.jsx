@@ -13,7 +13,7 @@ const TABLE_STATUS = {
   PAID:    { label: 'Оплачен',       color: '#888',    bg: '#f5f5f5', border: '#ddd'    },
 }
 
-export default function CashierPage() {
+export default function CashierPage({ cashier, shift }) {
   const [categories, setCategories] = useState([])
   const [activeCategory, setActiveCategory] = useState(null)
   const [search, setSearch] = useState('')
@@ -264,13 +264,13 @@ export default function CashierPage() {
       const res = await fetch(`${API}/orders/${activeOrder.id}/accept`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paymentType })
+        body: JSON.stringify({ paymentType, cashierName: cashier?.name, shiftId: shift?.id })
       })
       const order = await res.json()
       setPendingOrders(prev => prev.filter(o => o.id !== order.id))
       setOpenOrders(prev => prev.filter(o => o.id !== order.id))
-      setLastOrder(order)
-      await printReceipt(order)
+      setLastOrder({...order, cashierName: cashier?.name})
+      await printReceipt({...order, cashierName: cashier?.name})
       setActiveOrder(null)
       setCart([])
       setSelectedTable(null)
@@ -288,11 +288,11 @@ export default function CashierPage() {
       const res = await fetch(`${API}/orders/direct`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tableNumber: '', comment, items: cart, paymentType })
+        body: JSON.stringify({ tableNumber: '', comment, items: cart, paymentType, cashierName: cashier?.name, shiftId: shift?.id })
       })
       const order = await res.json()
-      setLastOrder(order)
-      await printReceipt(order)
+      setLastOrder({...order, cashierName: cashier?.name})
+      await printReceipt({...order, cashierName: cashier?.name})
       setCart([])
       setComment('')
       setAnalytics(null)
@@ -307,13 +307,13 @@ export default function CashierPage() {
       const res = await fetch(`${API}/orders/${order.id}/accept`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paymentType: pt })
+        body: JSON.stringify({ paymentType: pt, cashierName: cashier?.name, shiftId: shift?.id })
       })
       const accepted = await res.json()
       setPendingOrders(prev => prev.filter(o => o.id !== order.id))
       setOpenOrders(prev => prev.filter(o => o.id !== order.id))
-      setLastOrder(accepted)
-      await printReceipt(accepted)
+      setLastOrder({...accepted, cashierName: cashier?.name})
+      await printReceipt({...accepted, cashierName: cashier?.name})
       if (activeOrder?.id === order.id) { setActiveOrder(null); setCart([]) }
     } catch (e) { alert('Ошибка: ' + e.message) }
     setAcceptingId(null)
