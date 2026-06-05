@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
-import { PrismaClient } from '@prisma/client'
+import prismaClientPkg from '@prisma/client'
+const { PrismaClient } = prismaClientPkg
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { createServer } from 'http'
