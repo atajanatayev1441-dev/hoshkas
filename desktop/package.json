@@ -60,16 +60,18 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
-      "icon": "assets/icon.ico",
-      "requestedExecutionLevel": "asInvoker"
+      "signAndEditExecutable": false,
+      "sign": null,
+      "verifyUpdateCodeSignature": false
     },
     "mac": {
       "target": "dmg",
-      "icon": "assets/icon.icns",
-      "category": "public.app-category.business"
+      "identity": null
     },
     "linux": {
       "target": "AppImage",
@@ -80,7 +82,10 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "installerLanguages": ["ru_RU", "en_US"],
+      "installerLanguages": [
+        "ru_RU",
+        "en_US"
+      ],
       "language": "1049",
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
