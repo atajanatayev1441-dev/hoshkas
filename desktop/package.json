@@ -67,7 +67,8 @@
       ],
       "signAndEditExecutable": false,
       "sign": null,
-      "verifyUpdateCodeSignature": false
+      "verifyUpdateCodeSignature": false,
+      "icon": "assets/icon.ico"
     },
     "mac": {
       "target": "dmg",
