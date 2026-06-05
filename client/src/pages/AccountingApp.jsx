@@ -965,21 +965,55 @@ function Revisions() {
 }
 
 // ─── EXCEL УТИЛИТА ────────────────────────────────────────────
-function exportToExcel(data, filename, headers) {
-  const escape = v => {
-    if (v === null || v === undefined) return ''
-    const s = String(v)
-    if (s.includes(',') || s.includes('"') || s.includes('\n')) return `"${s.replace(/"/g,'""')}"`
-    return s
+async function exportToExcel(data, filename, headers) {
+  // Динамически загружаем SheetJS
+  if (!window.XLSX) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script')
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
+      s.onload = resolve; s.onerror = reject
+      document.head.appendChild(s)
+    })
   }
-  const rows = [headers.map(h => h.label)]
-  data.forEach(row => rows.push(headers.map(h => escape(row[h.key]))))
-  const csv = '\uFEFF' + rows.map(r => r.join(',')).join('\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = filename + '.csv'; a.click()
-  URL.revokeObjectURL(url)
+  const XLSX = window.XLSX
+
+  // Заголовки
+  const wsData = [headers.map(h => h.label)]
+  // Данные
+  data.forEach(row => wsData.push(headers.map(h => {
+    const v = row[h.key]
+    if (v === null || v === undefined) return ''
+    return v
+  })))
+
+  const ws = XLSX.utils.aoa_to_sheet(wsData)
+
+  // Ширина колонок автоматически
+  const colWidths = headers.map((h, i) => {
+    const maxLen = Math.max(
+      h.label.length,
+      ...data.map(row => String(row[h.key] ?? '').length)
+    )
+    return { wch: Math.min(Math.max(maxLen + 2, 10), 40) }
+  })
+  ws['!cols'] = colWidths
+
+  // Стиль заголовков (зелёный фон)
+  const headerRange = XLSX.utils.decode_range(ws['!ref'])
+  for (let c = headerRange.s.c; c <= headerRange.e.c; c++) {
+    const cell = ws[XLSX.utils.encode_cell({ r: 0, c })]
+    if (cell) {
+      cell.s = {
+        fill: { fgColor: { rgb: '217346' } },
+        font: { bold: true, color: { rgb: 'FFFFFF' } },
+        alignment: { horizontal: 'center' }
+      }
+    }
+  }
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Отчёт')
+  XLSX.writeFile(wb, filename + '.xlsx')
 }
 
 function ExcelBtn({ onClick }) {
