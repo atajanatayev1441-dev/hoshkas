@@ -307,6 +307,21 @@ app.post('/api/orders/direct', async (req, res) => {
       },
       include: { items: true }
     })
+    // Синхронизация смены
+    try {
+      const shift = await prisma.shift.findFirst({ where: { status: 'OPEN' }, orderBy: { openedAt: 'desc' } })
+      if (shift) {
+        const shiftOrders = await prisma.order.findMany({ where: { status: 'PAID', createdAt: { gte: shift.openedAt } } })
+        await prisma.shift.update({
+          where: { id: shift.id },
+          data: {
+            totalCash: shiftOrders.filter(o=>o.paymentType==='CASH').reduce((s,o)=>s+o.total,0),
+            totalCard: shiftOrders.filter(o=>o.paymentType==='CARD').reduce((s,o)=>s+o.total,0),
+            totalOrders: shiftOrders.length
+          }
+        })
+      }
+    } catch(e) { console.error('Direct order shift sync error:', e.message) }
     // Бухгалтерский учёт: списание склада, себестоимость, дневная сводка
     processOrderAccounting(order).catch(e => console.error('Accounting error:', e.message))
     res.json(order)
@@ -315,8 +330,45 @@ app.post('/api/orders/direct', async (req, res) => {
 
 app.put('/api/orders/:id/cancel', async (req, res) => {
   try {
-    const order = await prisma.order.update({ where: { id: Number(req.params.id) }, data: { status: 'CANCELLED' }, include: { items: true, waiter: true } })
+    const order = await prisma.order.update({
+      where: { id: Number(req.params.id) },
+      data: { status: 'CANCELLED' },
+      include: { items: true, waiter: true }
+    })
     broadcast('order_cancelled', order)
+
+    // Возврат склада если заказ был оплачен (PAID → CANCELLED)
+    if (order.status === 'CANCELLED') {
+      try {
+        // Удаляем авто-списания по этому заказу и возвращаем остатки
+        const writeoffs = await prisma.autoWriteoff.findMany({ where: { orderId: order.id } })
+        for (const w of writeoffs) {
+          await prisma.stockProduct.update({ where: { id: w.productId }, data: { currentStock: { increment: w.quantity } } })
+        }
+        await prisma.autoWriteoff.deleteMany({ where: { orderId: order.id } })
+        // Пересчитываем DailySummary за день заказа
+        const closedAt = order.closedAt || order.createdAt
+        if (closedAt) {
+          const dayStart = new Date(closedAt); dayStart.setHours(0,0,0,0)
+          const dayEnd = new Date(closedAt); dayEnd.setHours(23,59,59,999)
+          const [dayOrders, dayExpenses, dayWriteoffs] = await Promise.all([
+            prisma.order.findMany({ where: { status: 'PAID', closedAt: { gte: dayStart, lte: dayEnd } } }),
+            prisma.expense.findMany({ where: { date: { gte: dayStart, lte: dayEnd } } }),
+            prisma.autoWriteoff.findMany({ where: { createdAt: { gte: dayStart, lte: dayEnd } } }),
+          ])
+          const revenue = dayOrders.reduce((s,o)=>s+o.total,0)
+          const expenses = dayExpenses.reduce((s,e)=>s+e.amount,0)
+          const dayCost = dayWriteoffs.reduce((s,w)=>s+w.totalCost,0)
+          const grossProfit = revenue - dayCost
+          await prisma.dailySummary.upsert({
+            where: { date: dayStart },
+            create: { date: dayStart, revenue, revenueCash: dayOrders.filter(o=>o.paymentType==='CASH').reduce((s,o)=>s+o.total,0), revenueCard: dayOrders.filter(o=>o.paymentType==='CARD').reduce((s,o)=>s+o.total,0), ordersCount: dayOrders.length, avgCheck: dayOrders.length?revenue/dayOrders.length:0, costOfGoods: dayCost, grossProfit, expenses, netProfit: grossProfit-expenses },
+            update: { revenue, revenueCash: dayOrders.filter(o=>o.paymentType==='CASH').reduce((s,o)=>s+o.total,0), revenueCard: dayOrders.filter(o=>o.paymentType==='CARD').reduce((s,o)=>s+o.total,0), ordersCount: dayOrders.length, avgCheck: dayOrders.length?revenue/dayOrders.length:0, costOfGoods: dayCost, grossProfit, expenses, netProfit: grossProfit-expenses }
+          })
+        }
+      } catch(e) { console.error('Cancel accounting rollback error:', e.message) }
+    }
+
     res.json(order)
   } catch (e) { res.status(500).json({ error: e.message }) }
 })

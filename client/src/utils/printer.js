@@ -1,100 +1,169 @@
-// ESC/POS printer via Web Serial API or window.print() fallback
+// Печать чека — ESC/POS (USB принтер) или красивый PDF в браузере
 
 export async function printReceipt(order) {
-  // Try Web Serial API (Chrome on desktop with USB/COM printer)
   if ('serial' in navigator) {
-    try {
-      await printViaSerial(order)
-      return
-    } catch (e) {
-      console.warn('Serial print failed, falling back to window.print()', e)
+    try { await printViaSerial(order); return } catch(e) {
+      console.warn('Serial print failed, fallback to window.print()', e)
     }
   }
-  // Fallback: print dialog
   printViaWindow(order)
 }
 
+// ─── ESC/POS через Web Serial API ────────────────────────────
 async function printViaSerial(order) {
   const port = await navigator.serial.requestPort()
   await port.open({ baudRate: 9600 })
-
   const writer = port.writable.getWriter()
   const enc = new TextEncoder()
-
-  const ESC = 0x1B
-  const GS = 0x1D
-
   const cmd = (bytes) => writer.write(new Uint8Array(bytes))
   const txt = (s) => writer.write(enc.encode(s))
+  const line = () => txt('--------------------------------\n')
 
-  // Init
-  await cmd([ESC, 0x40])
-  // Center
-  await cmd([ESC, 0x61, 0x01])
+  await cmd([0x1B, 0x40])          // Init
+  await cmd([0x1B, 0x61, 0x01])    // Center
+  await cmd([0x1D, 0x21, 0x11])    // Double size
   await txt('HOS LOUNGE\n')
-  await txt('--------------------------------\n')
-  // Left
-  await cmd([ESC, 0x61, 0x00])
-  await txt(`Чек #${order.number}\n`)
-  await txt(`${new Date(order.createdAt).toLocaleString('ru-RU')}\n`)
+  await cmd([0x1D, 0x21, 0x00])    // Normal
+  await txt('Ресторан-бар\n\n')
+  await line()
+  await cmd([0x1B, 0x61, 0x00])    // Left
+  await txt(`Чек #${order.number || order.id}\n`)
+  await txt(`${new Date(order.closedAt || order.createdAt).toLocaleString('ru-RU', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}\n`)
   if (order.tableNumber) await txt(`Стол: ${order.tableNumber}\n`)
-  await txt('--------------------------------\n')
+  if (order.cashierName) await txt(`Кассир: ${order.cashierName}\n`)
+  await line()
 
-  for (const item of order.items) {
-    const left = `${item.name} x${item.quantity}`
-    const right = `${(item.price * item.quantity).toFixed(2)}`
-    const spaces = 32 - left.length - right.length
-    await txt(left + ' '.repeat(Math.max(1, spaces)) + right + '\n')
+  for (const item of (order.items || [])) {
+    const name = item.name.length > 20 ? item.name.slice(0,19) + '…' : item.name
+    const qty = `x${item.quantity}`
+    const price = `${(item.price * item.quantity).toFixed(2)}`
+    const spaces = 32 - name.length - qty.length - price.length - 1
+    await txt(`${name} ${qty}${' '.repeat(Math.max(1, spaces))}${price}\n`)
   }
 
-  await txt('--------------------------------\n')
-  // Bold total
-  await cmd([ESC, 0x45, 0x01])
-  await txt(`ИТОГО: ${order.total.toFixed(2)} TMT\n`)
-  await cmd([ESC, 0x45, 0x00])
+  await line()
+  await cmd([0x1B, 0x45, 0x01])    // Bold
+  const total = `${order.total.toFixed(2)} TMT`
+  await txt(`ИТОГО:${' '.repeat(26 - total.length)}${total}\n`)
+  await cmd([0x1B, 0x45, 0x00])
   await txt(`Оплата: ${order.paymentType === 'CASH' ? 'Наличные' : 'Карта'}\n`)
-  await txt('--------------------------------\n')
-  // Center
-  await cmd([ESC, 0x61, 0x01])
-  await txt('Спасибо! Приятного отдыха!\n\n\n')
-  // Cut
-  await cmd([GS, 0x56, 0x41, 0x10])
-
+  await line()
+  await cmd([0x1B, 0x61, 0x01])    // Center
+  await txt('\nСпасибо за визит!\nПриятного отдыха!\n\n\n')
+  await cmd([0x1D, 0x56, 0x41, 0x10])  // Cut
   writer.releaseLock()
   await port.close()
 }
 
+// ─── Печать через браузер ─────────────────────────────────────
 function printViaWindow(order) {
-  const w = window.open('', '_blank', 'width=400,height=600')
-  const lines = order.items.map(i =>
-    `<tr><td>${i.name} x${i.quantity}</td><td style="text-align:right">${(i.price * i.quantity).toFixed(2)}</td></tr>`
-  ).join('')
+  const w = window.open('', '_blank', 'width=380,height=700')
+  if (!w) { alert('Разрешите всплывающие окна для печати'); return }
 
-  w.document.write(`
-    <html><head><title>Чек #${order.number}</title>
-    <style>
-      body { font-family: monospace; font-size: 13px; width: 280px; margin: 0 auto; }
-      h2 { text-align: center; }
-      hr { border: 1px dashed #000; }
-      table { width: 100%; }
-      .total { font-weight: bold; font-size: 15px; }
-      .center { text-align: center; }
-    </style></head><body>
-    <h2>HOS LOUNGE</h2>
-    <hr>
-    <p>Чек #${order.number}<br>
-    ${new Date(order.createdAt).toLocaleString('ru-RU')}<br>
-    ${order.tableNumber ? 'Стол: ' + order.tableNumber : ''}</p>
-    <hr>
-    <table>${lines}</table>
-    <hr>
-    <p class="total">ИТОГО: ${order.total.toFixed(2)} TMT</p>
-    <p>Оплата: ${order.paymentType === 'CASH' ? 'Наличные' : 'Карта'}</p>
-    <hr>
-    <p class="center">Спасибо! Приятного отдыха!</p>
-    </body></html>
-  `)
+  const date = new Date(order.closedAt || order.createdAt)
+  const dateStr = date.toLocaleString('ru-RU', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  })
+
+  const items = (order.items || []).map(i => `
+    <tr>
+      <td style="padding:4px 0;max-width:170px;word-wrap:break-word">${i.name}</td>
+      <td style="padding:4px 6px;text-align:center;white-space:nowrap">×${i.quantity}</td>
+      <td style="padding:4px 0;text-align:right;white-space:nowrap">${(i.price * i.quantity).toFixed(2)}</td>
+    </tr>
+    <tr>
+      <td colspan="3" style="padding:0 0 4px 0;color:#888;font-size:11px">${i.price.toFixed(2)} × ${i.quantity} шт</td>
+    </tr>
+  `).join('')
+
+  const payType = order.paymentType === 'CASH' ? 'Наличные' : 'Карта'
+
+  w.document.write(`<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Чек #${order.number || order.id}</title>
+<style>
+  @page { margin: 0; size: 80mm auto; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px;
+    width: 80mm;
+    max-width: 80mm;
+    margin: 0 auto;
+    padding: 8mm 4mm;
+    color: #000;
+    background: #fff;
+  }
+  .center { text-align: center; }
+  .logo { font-size: 20px; font-weight: 900; letter-spacing: 3px; margin-bottom: 2px; }
+  .sub { font-size: 11px; color: #555; margin-bottom: 8px; }
+  .dashes { border: none; border-top: 1px dashed #000; margin: 8px 0; }
+  .meta { font-size: 12px; margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; }
+  .total-row td { font-weight: 900; font-size: 15px; padding-top: 8px; }
+  .footer { margin-top: 10px; font-size: 12px; color: #444; }
+  .badge {
+    display: inline-block;
+    border: 1.5px solid #000;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 4px;
+  }
+  @media print {
+    body { -webkit-print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+  <div class="center">
+    <div class="logo">HOS LOUNGE</div>
+    <div class="sub">Ресторан-бар</div>
+  </div>
+
+  <hr class="dashes">
+
+  <div class="meta">Чек: <b>#${order.number || order.id}</b></div>
+  <div class="meta">Дата: ${dateStr}</div>
+  ${order.tableNumber ? `<div class="meta">Стол: <b>${order.tableNumber}</b></div>` : ''}
+  ${order.cashierName ? `<div class="meta">Кассир: ${order.cashierName}</div>` : ''}
+
+  <hr class="dashes">
+
+  <table>
+    <tbody>${items}</tbody>
+    <tr><td colspan="3"><hr class="dashes" style="margin:4px 0"></td></tr>
+    <tr class="total-row">
+      <td colspan="2">ИТОГО:</td>
+      <td style="text-align:right">${order.total.toFixed(2)} TMT</td>
+    </tr>
+  </table>
+
+  <div style="margin-top:8px">
+    <span class="badge">${payType}</span>
+  </div>
+
+  <hr class="dashes">
+
+  <div class="center footer">
+    <div>Спасибо за визит!</div>
+    <div>Приятного отдыха!</div>
+    <div style="margin-top:6px;font-size:10px;color:#999">
+      ${date.toLocaleDateString('ru-RU')} ${date.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}
+    </div>
+  </div>
+</body>
+</html>`)
+
   w.document.close()
   w.focus()
-  setTimeout(() => { w.print(); w.close() }, 300)
+  // Даём время на рендеринг перед печатью
+  setTimeout(() => {
+    w.print()
+    setTimeout(() => w.close(), 1000)
+  }, 400)
 }
