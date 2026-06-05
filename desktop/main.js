@@ -1,47 +1,181 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
-import CashierPage from './pages/CashierPage.jsx'
-import AccountingPage from './pages/AccountingPage.jsx'
-import MenuPage from './pages/MenuPage.jsx'
-import WaitersPage from './pages/WaitersPage.jsx'
-import './style.css'
+const { app, BrowserWindow, shell, dialog, ipcMain } = require('electron')
+const { spawn } = require('child_process')
+const path = require('path')
+const fs = require('fs')
+const http = require('http')
 
-function Nav() {
-  const loc = useLocation()
-  return (
-    <nav className="nav">
-      <span className="nav-logo">HOS LOUNGE</span>
-      <div className="nav-links">
-        <Link className={loc.pathname === '/' ? 'active' : ''} to="/">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-          Касса
-        </Link>
-        <Link className={loc.pathname === '/accounting' ? 'active' : ''} to="/accounting">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-          Бухгалтерия
-        </Link>
-        <Link className={loc.pathname === '/menu' ? 'active' : ''} to="/menu">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
-          Меню
-        </Link>
-        <Link className={loc.pathname === '/waiters' ? 'active' : ''} to="/waiters">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          Официанты
-        </Link>
-      </div>
-    </nav>
-  )
+let mainWindow = null
+let serverProcess = null
+const SERVER_PORT = 3721
+
+// Путь к серверу
+function getServerPath() {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'server')
+  }
+  return path.join(__dirname, '..', 'server')
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <BrowserRouter>
-    <Nav />
-    <Routes>
-      <Route path="/" element={<CashierPage />} />
-      <Route path="/accounting" element={<AccountingPage />} />
-      <Route path="/menu" element={<MenuPage />} />
-      <Route path="/waiters" element={<WaitersPage />} />
-    </Routes>
-  </BrowserRouter>
-)
+// Путь к node
+function getNodePath() {
+  if (app.isPackaged) {
+    // Внутри пакета — node рядом
+    const ext = process.platform === 'win32' ? '.exe' : ''
+    return path.join(process.resourcesPath, 'node' + ext)
+  }
+  return process.execPath.includes('electron') ? 'node' : process.execPath
+}
+
+// Ждём пока сервер запустится
+function waitForServer(maxAttempts = 30) {
+  return new Promise((resolve, reject) => {
+    let attempts = 0
+    const check = () => {
+      attempts++
+      const req = http.get(`http://localhost:${SERVER_PORT}/health`, res => {
+        if (res.statusCode === 200) resolve()
+        else if (attempts < maxAttempts) setTimeout(check, 500)
+        else reject(new Error('Server timeout'))
+      })
+      req.on('error', () => {
+        if (attempts < maxAttempts) setTimeout(check, 500)
+        else reject(new Error('Server not responding'))
+      })
+      req.end()
+    }
+    check()
+  })
+}
+
+function startServer() {
+  return new Promise((resolve, reject) => {
+    const serverPath = getServerPath()
+    const env = {
+      ...process.env,
+      PORT: SERVER_PORT,
+      NODE_ENV: 'production',
+      DATABASE_URL: `file:${path.join(app.getPath('userData'), 'hoslounge.db')}`,
+    }
+
+    console.log('Starting server at:', serverPath)
+
+    // Запускаем сервер
+    serverProcess = spawn('node', ['index.js'], {
+      cwd: serverPath,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: process.platform === 'win32',
+    })
+
+    serverProcess.stdout.on('data', d => console.log('[server]', d.toString().trim()))
+    serverProcess.stderr.on('data', d => console.error('[server err]', d.toString().trim()))
+
+    serverProcess.on('error', err => {
+      console.error('Failed to start server:', err)
+      reject(err)
+    })
+
+    serverProcess.on('exit', (code) => {
+      console.log('Server exited with code:', code)
+    })
+
+    // Ждём запуска
+    waitForServer().then(resolve).catch(reject)
+  })
+}
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 1024,
+    minHeight: 700,
+    title: 'HOS LOUNGE',
+    backgroundColor: '#0d0d1a',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+    // Убираем стандартный тайтлбар — используем кастомный если нужно
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    icon: path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+  })
+
+  mainWindow.loadURL(`http://localhost:${SERVER_PORT}`)
+
+  // Открываем ссылки в браузере, а не в Electron
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
+  mainWindow.on('closed', () => { mainWindow = null })
+}
+
+async function main() {
+  // Показываем сплэш если нужно
+  const splash = new BrowserWindow({
+    width: 400,
+    height: 300,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    webPreferences: { nodeIntegration: false },
+    backgroundColor: '#0d0d1a',
+  })
+
+  splash.loadURL(`data:text/html,
+    <html>
+    <body style="margin:0;background:#0d0d1a;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:system-ui;color:#fff">
+      <div style="font-size:11px;letter-spacing:4px;color:#c9a96e;text-transform:uppercase;margin-bottom:8px">HOS LOUNGE</div>
+      <div style="font-size:22px;font-weight:900;margin-bottom:24px">Запуск системы...</div>
+      <div style="width:200px;height:3px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden">
+        <div id="bar" style="width:0%;height:100%;background:#c9a96e;border-radius:2px;transition:width 0.3s"></div>
+      </div>
+      <div id="status" style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:12px">Инициализация...</div>
+      <script>
+        let w=0
+        const t=setInterval(()=>{ w=Math.min(w+2,90); document.getElementById('bar').style.width=w+'%' },100)
+      </script>
+    </body></html>
+  `)
+
+  try {
+    await startServer()
+    splash.close()
+    createWindow()
+  } catch (err) {
+    splash.close()
+    dialog.showErrorBox('Ошибка запуска', `Не удалось запустить сервер:\n${err.message}\n\nПопробуйте перезапустить приложение.`)
+    app.quit()
+  }
+}
+
+app.whenReady().then(main)
+
+app.on('window-all-closed', () => {
+  if (serverProcess) { serverProcess.kill(); serverProcess = null }
+  if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('activate', () => {
+  if (mainWindow === null) createWindow()
+})
+
+app.on('before-quit', () => {
+  if (serverProcess) { serverProcess.kill(); serverProcess = null }
+})
+
+// IPC для диалога сохранения файлов (Excel)
+ipcMain.handle('save-file', async (event, { buffer, filename }) => {
+  const { filePath } = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: filename,
+    filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+  })
+  if (filePath) {
+    fs.writeFileSync(filePath, Buffer.from(buffer))
+    return { ok: true, path: filePath }
+  }
+  return { ok: false }
+})

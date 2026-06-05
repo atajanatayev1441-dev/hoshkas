@@ -1,0 +1,393 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── СПРАВОЧНИК СКЛАДОВ ───────────────────────────────────────
+model Warehouse {
+  id            Int             @id @default(autoincrement())
+  name          String          @unique
+  active        Boolean         @default(true)
+  departments   Department[]
+  stockProducts StockProduct[]
+  transfersFrom StockTransfer[] @relation("TransferFrom")
+  transfersTo   StockTransfer[] @relation("TransferTo")
+  createdAt     DateTime        @default(now())
+}
+
+// ─── СПРАВОЧНИК ПОДРАЗДЕЛЕНИЙ ─────────────────────────────────
+model Department {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  warehouseId Int
+  warehouse   Warehouse    @relation(fields: [warehouseId], references: [id])
+  active      Boolean      @default(true)
+  items       Item[]
+  createdAt   DateTime     @default(now())
+}
+
+// ─── МЕНЮ ────────────────────────────────────────────────────
+model Category {
+  id           Int      @id @default(autoincrement())
+  name         String
+  sortOrder    Int      @default(0)
+  active       Boolean  @default(true)
+  items        Item[]
+  createdAt    DateTime @default(now())
+}
+
+model Item {
+  id           Int         @id @default(autoincrement())
+  name         String
+  price        Float
+  categoryId   Int
+  category     Category    @relation(fields: [categoryId], references: [id])
+  departmentId Int?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  orderItems   OrderItem[]
+  active       Boolean     @default(true)
+  cost         ItemCost?
+  recipe       Recipe?
+  createdAt    DateTime    @default(now())
+}
+
+// ─── ПЕРСОНАЛ ────────────────────────────────────────────────
+model Waiter {
+  id        Int      @id @default(autoincrement())
+  name      String
+  pin       String
+  active    Boolean  @default(true)
+  orders    Order[]
+  createdAt DateTime @default(now())
+}
+
+// ─── ЗАКАЗЫ ──────────────────────────────────────────────────
+model Order {
+  id          Int         @id @default(autoincrement())
+  number      Int         @unique
+  status  String @default(OPEN)
+  tableNumber String?
+  comment     String?
+  items       OrderItem[]
+  total       Float
+  paymentType  String @default(CASH)
+  waiterId    Int?
+  waiter      Waiter?     @relation(fields: [waiterId], references: [id])
+  waiterName  String?
+  createdAt   DateTime    @default(now())
+  closedAt    DateTime?
+}
+
+model OrderItem {
+  id       Int   @id @default(autoincrement())
+  orderId  Int
+  itemId   Int
+  order    Order @relation(fields: [orderId], references: [id])
+  item     Item  @relation(fields: [itemId], references: [id])
+  quantity Int
+  price    Float
+  name     String
+}
+
+// ─── БУХГАЛТЕРИЯ ─────────────────────────────────────────────
+model Expense {
+  id          Int             @id @default(autoincrement())
+  amount      Float
+  category  String
+  description String?
+  date        DateTime        @default(now())
+  createdAt   DateTime        @default(now())
+}
+
+model Debt {
+  id          Int        @id @default(autoincrement())
+  clientName  String
+  phone       String?
+  amount      Float
+  description String?
+  status  String @default(UNPAID)
+  createdAt   DateTime   @default(now())
+  paidAt      DateTime?
+}
+
+model Revision {
+  id        Int      @id @default(autoincrement())
+  date      DateTime @default(now())
+  cashIn    Float    @default(0)
+  cashOut   Float    @default(0)
+  cardTotal Float    @default(0)
+  expenses  Float    @default(0)
+  notes     String?
+  createdBy String?
+  createdAt DateTime @default(now())
+}
+
+model AccountingUser {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  createdAt DateTime @default(now())
+}
+
+// ─── СКЛАД ────────────────────────────────────────────────────
+model Supplier {
+  id        Int            @id @default(autoincrement())
+  name      String
+  phone     String?
+  active    Boolean        @default(true)
+  arrivals  StockArrival[]
+  createdAt DateTime       @default(now())
+}
+
+model StockProduct {
+  id             Int                @id @default(autoincrement())
+  name           String
+  unit           String             @default("шт")
+  costPrice      Float              @default(0)
+  currentStock   Float              @default(0)
+  minStock       Float              @default(0)
+  warehouseId    Int?
+  warehouse      Warehouse?         @relation(fields: [warehouseId], references: [id])
+  active         Boolean            @default(true)
+  arrivalItems   StockArrivalItem[]
+  recipeItems    RecipeItem[]
+  transferItems  StockTransferItem[]
+  writeoffItems  StockWriteoffItem[]
+  inventoryItems InventoryItem[]
+  autoWriteoffs  AutoWriteoff[]
+  createdAt      DateTime           @default(now())
+}
+
+model StockArrival {
+  id          Int                @id @default(autoincrement())
+  date        DateTime           @default(now())
+  supplierId  Int?
+  supplier    Supplier?          @relation(fields: [supplierId], references: [id])
+  invoiceNum  String?
+  totalAmount Float              @default(0)
+  notes       String?
+  createdBy   String?
+  items       StockArrivalItem[]
+  createdAt   DateTime           @default(now())
+}
+
+model StockArrivalItem {
+  id        Int          @id @default(autoincrement())
+  arrivalId Int
+  arrival   StockArrival @relation(fields: [arrivalId], references: [id], onDelete: Cascade)
+  productId Int
+  product   StockProduct @relation(fields: [productId], references: [id])
+  quantity  Float
+  price     Float
+  total     Float
+}
+
+model StockWriteoff {
+  id        Int                 @id @default(autoincrement())
+  date      DateTime            @default(now())
+  reason    String?
+  notes     String?
+  createdBy String?
+  items     StockWriteoffItem[]
+  createdAt DateTime            @default(now())
+}
+
+model StockWriteoffItem {
+  id         Int           @id @default(autoincrement())
+  writeoffId Int
+  writeoff   StockWriteoff @relation(fields: [writeoffId], references: [id], onDelete: Cascade)
+  productId  Int
+  product    StockProduct  @relation(fields: [productId], references: [id])
+  quantity   Float
+  reason     String?
+}
+
+model Inventory {
+  id        Int             @id @default(autoincrement())
+  date      DateTime        @default(now())
+  notes     String?
+  createdBy String?
+  items     InventoryItem[]
+  createdAt DateTime        @default(now())
+}
+
+model InventoryItem {
+  id          Int          @id @default(autoincrement())
+  inventoryId Int
+  inventory   Inventory    @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  productId   Int
+  product     StockProduct @relation(fields: [productId], references: [id])
+  expected    Float
+  actual      Float
+  diff        Float
+}
+
+// ─── КОНТРОЛЬ ЦЕН ─────────────────────────────────────────────
+model ItemCost {
+  id        Int      @id @default(autoincrement())
+  itemId    Int      @unique
+  item      Item     @relation(fields: [itemId], references: [id])
+  costPrice Float    @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+// ─── ENUMS ────────────────────────────────────────────────────
+
+
+
+model HistoricalOrder {
+  id          Int      @id @default(autoincrement())
+  number      String
+  date        DateTime
+  payType     String?
+  cashier     String?
+  waiter      String?
+  hall        String?
+  tableNumber String?
+  total       Float
+  source      String   @default("ATLANT")
+  createdAt   DateTime @default(now())
+}
+
+model SalesDynamics {
+  id        Int      @id @default(autoincrement())
+  dept      String
+  group     String?
+  itemName  String
+  year      Int      @default(2026)
+  jan       Int      @default(0)
+  feb       Int      @default(0)
+  mar       Int      @default(0)
+  apr       Int      @default(0)
+  may       Int      @default(0)
+  jun       Int      @default(0)
+  jul       Int      @default(0)
+  aug       Int      @default(0)
+  sep       Int      @default(0)
+  oct       Int      @default(0)
+  nov       Int      @default(0)
+  dec       Int      @default(0)
+  total     Int      @default(0)
+  createdAt DateTime @default(now())
+}
+// ─── СМЕНЫ ────────────────────────────────────────────────────
+model Shift {
+  id          Int       @id @default(autoincrement())
+  cashierName String
+  cashierPin  String?
+  status  String @default(OPEN)
+  openedAt    DateTime  @default(now())
+  closedAt    DateTime?
+  openCash    Float     @default(0)
+  closeCash   Float?
+  totalCash   Float     @default(0)
+  totalCard   Float     @default(0)
+  totalOrders Int       @default(0)
+  notes       String?
+  createdAt   DateTime  @default(now())
+}
+
+// ─── КАССИРЫ ──────────────────────────────────────────────────
+model Cashier {
+  id        Int      @id @default(autoincrement())
+  name      String
+  pin       String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+// ─── КАЛЬКУЛЯЦИЯ БЛЮД ─────────────────────────────────────────
+model Recipe {
+  id          Int          @id @default(autoincrement())
+  itemId      Int          @unique
+  item        Item         @relation(fields: [itemId], references: [id])
+  yield       Float        @default(1)
+  yieldUnit   String       @default("порция")
+  totalCost   Float        @default(0)
+  notes       String?
+  ingredients RecipeItem[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model RecipeItem {
+  id          Int          @id @default(autoincrement())
+  recipeId    Int
+  recipe      Recipe       @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  productId   Int
+  product     StockProduct @relation(fields: [productId], references: [id])
+  quantity    Float
+  unit        String       @default("г")
+  wastePct    Float        @default(0)
+  grossQty    Float        @default(0)
+  costPrice   Float        @default(0)
+  totalCost   Float        @default(0)
+}
+// ─── ПЕРЕМЕЩЕНИЕ ТОВАРОВ ──────────────────────────────────────
+model StockTransfer {
+  id            Int                  @id @default(autoincrement())
+  fromWarehouse Warehouse            @relation("TransferFrom", fields: [fromWarehouseId], references: [id])
+  fromWarehouseId Int
+  toWarehouse   Warehouse            @relation("TransferTo", fields: [toWarehouseId], references: [id])
+  toWarehouseId Int
+  date          DateTime             @default(now())
+  notes         String?
+  createdBy     String?
+  items         StockTransferItem[]
+  createdAt     DateTime             @default(now())
+}
+
+model StockTransferItem {
+  id          Int           @id @default(autoincrement())
+  transferId  Int
+  transfer    StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  productId   Int
+  product     StockProduct  @relation(fields: [productId], references: [id])
+  quantity    Float
+}
+
+
+// ─── ЕДИНАЯ СИСТЕМА ПОЛЬЗОВАТЕЛЕЙ ────────────────────────────
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  password  String
+  name      String
+  role  String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+// ─── ФИНАНСОВЫЙ УЧЁТ ─────────────────────────────────────────
+// Ежедневные сводки для динамики и дашборда
+model DailySummary {
+  id            Int      @id @default(autoincrement())
+  date          DateTime @unique
+  revenue       Float    @default(0)
+  revenueCash   Float    @default(0)
+  revenueCard   Float    @default(0)
+  ordersCount   Int      @default(0)
+  avgCheck      Float    @default(0)
+  costOfGoods   Float    @default(0)  // себестоимость проданного
+  grossProfit   Float    @default(0)  // выручка - себестоимость
+  expenses      Float    @default(0)  // расходы за день
+  netProfit     Float    @default(0)  // валовая - расходы
+  updatedAt     DateTime @updatedAt
+}
+
+// Автоматическое списание ингредиентов при продаже
+model AutoWriteoff {
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  productId   Int
+  product     StockProduct @relation(fields: [productId], references: [id])
+  quantity    Float
+  costPrice   Float
+  totalCost   Float
+  createdAt   DateTime @default(now())
+}

@@ -1,45 +1,55 @@
 {
-  "name": "cafe-pos-desktop",
+  "name": "hos-lounge-pos",
   "version": "1.0.0",
-  "description": "Кассовая программа для кафе",
+  "description": "HOS LOUNGE — система учёта ресторана",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --dev",
-    "build:win": "electron-builder --win --x64",
-    "build:mac": "electron-builder --mac",
-    "build:linux": "electron-builder --linux"
+    "build": "npm run build:client && electron-builder --win --x64",
+    "build:win": "npm run build:client && electron-builder --win --x64",
+    "build:mac": "npm run build:client && electron-builder --mac",
+    "build:linux": "npm run build:client && electron-builder --linux",
+    "build:client": "cd ../client && npm install && npm run build"
   },
   "dependencies": {
-    "@prisma/client": "^5.10.0",
+    "@prisma/client": "5.22.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "prisma": "^5.10.0"
+    "ws": "^8.16.0"
   },
   "devDependencies": {
-    "electron": "^29.0.0",
-    "electron-builder": "^24.9.1"
+    "electron": "^29.4.6",
+    "electron-builder": "^24.13.3",
+    "prisma": "5.22.0"
   },
   "build": {
-    "appId": "com.cafe.pos",
-    "productName": "ЛаунжКасса",
-    "copyright": "Кафе-касса",
+    "appId": "com.hoslounge.pos",
+    "productName": "HOS LOUNGE",
+    "copyright": "HOS LOUNGE",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/@prisma/**",
+      "node_modules/prisma/**"
+    ],
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "assets"
     },
     "files": [
       "main.js",
       "preload.js",
-      "!node_modules/prisma/engines/**",
       "node_modules/**",
-      "server/**",
-      "public/**"
+      "!node_modules/.cache/**"
     ],
     "extraResources": [
       {
         "from": "../server",
         "to": "server",
-        "filter": ["**/*", "!node_modules"]
+        "filter": [
+          "**/*",
+          "!node_modules/**",
+          "!.env"
+        ]
       },
       {
         "from": "../public",
@@ -47,22 +57,37 @@
       }
     ],
     "win": {
-      "target": "nsis",
-      "icon": "assets/icon.ico"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
     },
     "mac": {
       "target": "dmg",
-      "icon": "assets/icon.icns"
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.business"
     },
     "linux": {
       "target": "AppImage",
-      "icon": "assets/icon.png"
+      "icon": "assets/icon.png",
+      "category": "Office"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "installerLanguages": ["ru_RU", "en_US"],
-      "language": "1049"
+      "language": "1049",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "HOS LOUNGE"
     }
   }
 }
