@@ -59,7 +59,7 @@
     "win": {
       "target": [
         {
-          "target": "nsis",
+          "target": "dir",
           "arch": [
             "x64"
           ]
@@ -67,7 +67,6 @@
       ],
       "signAndEditExecutable": false,
       "sign": null,
-      "verifyUpdateCodeSignature": false,
       "icon": "assets/icon.ico"
     },
     "mac": {
